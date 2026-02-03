@@ -438,9 +438,123 @@ public void clearInbox(UUID playerUuid, Consumer<Integer> callback) {
 
 ---
 
-*最后更新: 2026-02-02*
+*最后更新: 2026-02-04*
 
-### 本次更新记录
+### 项目改名（2026-02-04）
+
+项目正式更名为 **FoliaMail**，更好地体现对 Folia 多线程服务器的支持。
+
+**变更内容：**
+- 项目名：`mail_system` → `FoliaMail`
+- JAR 文件名：`FoliaMail-1.0.1.jar`
+- 插件名：`FoliaMail`
+
+---
+
+### 每日发送限制功能（2026-02-03）
+
+**配置文件**：
+```yaml
+mail:
+  # 玩家每日发送邮件上限（0为无限制，管理员权限 mailsystem.admin 不受此限制）
+  daily-send-limit: 10
+```
+
+**实现要点**：
+- 使用独立表 `mail_send_log` 记录每日发送次数，删除邮件不影响统计
+- 异步查询，不卡顿主线程
+- 管理员权限（`mailsystem.admin`）不受此限制
+
+**数据库表**：
+```sql
+CREATE TABLE mail_send_log (
+    player_uuid VARCHAR(36) NOT NULL,
+    send_date VARCHAR(10) NOT NULL,  -- yyyy-MM-dd
+    send_count INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (player_uuid, send_date)
+);
+```
+
+---
+
+### 数据库超时配置与熔断机制（2026-02-03）
+
+**配置文件**（修改后需重启生效）：
+```yaml
+database:
+  timeout:
+    connection-timeout: 5000   # 获取连接超时（毫秒）
+    query-timeout: 10          # 查询执行超时（秒）
+    lock-wait-timeout: 5       # 锁等待超时（秒）
+```
+
+**实现功能**：
+1. **连接层超时** - HikariCP `connectionTimeout` 防止获取连接无限等待
+2. **查询执行超时** - `Statement.setQueryTimeout()` 控制单查询时长
+3. **锁等待超时** - MySQL/H2 URL参数设置
+4. **队列健康监控** - 队列深度超过100时输出警告（30秒节流）
+5. **熔断机制** - 队列超过200个任务时拒绝新任务，触发错误回调
+
+**熔断阈值**：
+- 告警阈值：100个任务
+- 超载阈值：200个任务
+
+---
+
+### 黑名单功能（2026-02-03）
+
+**数据库表**：
+```sql
+CREATE TABLE mail_blacklist (
+    owner_uuid VARCHAR(36) NOT NULL,     -- 黑名单所有者
+    blocked_uuid VARCHAR(36) NOT NULL,   -- 被屏蔽的玩家
+    blocked_time BIGINT NOT NULL,        -- 添加时间
+    PRIMARY KEY (owner_uuid, blocked_uuid)
+);
+```
+
+**命令**：
+- `/fmail blacklist add <玩家>` - 添加黑名单
+- `/fmail blacklist remove <玩家>` - 移除黑名单
+- `/fmail blacklist list` - 查看黑名单
+
+**特性**：
+- 黑名单中的玩家无法给自己发送邮件（管理员权限除外）
+- 在发送流程中异步检查，不卡顿主线程
+- 在 GUI 帮助界面添加了黑名单命令说明
+
+---
+
+### 可配置货币单位（2026-02-04）
+
+**配置文件**：
+```yaml
+economy:
+  currency-name: "金币"  # 货币单位，如 100 金币
+```
+
+**EconomyManager.format() 方法**：
+```java
+public String format(double amount) {
+    String currencyName = plugin.getMailConfig().getCurrencyName();
+    return String.format("%.2f %s", amount, currencyName);
+}
+```
+
+**默认显示**：`10.00 金币`（可自定义为钻石、点券等）
+
+---
+
+### 历史修复记录
+
+**H2 MERGE INTO 语法修复**：
+- 原使用 H2 的 `MERGE INTO ... VALUES (...)` 语法在复杂表达式时报错
+- 改为可靠的 `UPDATE → INSERT` 方式：先尝试更新计数，无记录则插入新记录
+- 兼容 H2 和 MySQL，避免 UPSERT 语法差异
+
+---
+
+### 本次更新记录（2026-02-02）
 
 **修复问题：**
 - #12 Command sent命令改用数据库查询
