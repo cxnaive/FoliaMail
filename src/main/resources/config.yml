@@ -52,6 +52,8 @@ mail:
   max-mailbox-size: 20
   # 玩家每日发送邮件上限（0为无限制，管理员权限 mailsystem.admin 不受此限制）
   daily-send-limit: 10
+  # 群发邮件超时时间（秒），超过此时间未完成的群发将被取消
+  broadcast-timeout: 30
 
 # 经济设置（需要安装 XConomy 插件）
 economy:

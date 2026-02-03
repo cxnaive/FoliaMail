@@ -14,6 +14,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -502,10 +503,11 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                     ItemStack item = target.getAttachments().get(i);
                     if (item != null) {
                         String itemName;
-                        if (item.getItemMeta().hasDisplayName()) {
+                        ItemMeta meta = item.getItemMeta();
+                        if (meta != null && meta.hasDisplayName()) {
                             // 使用 Adventure Component API (Paper 1.20.5+)
                             itemName = net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                                    .serialize(item.getItemMeta().displayName());
+                                    .serialize(meta.displayName());
                         } else {
                             itemName = item.getType().name();
                         }
@@ -935,6 +937,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
     private void broadcastToTargets(Player sender, Map<UUID, String> targets, String title, String content, String targetDesc) {
         AtomicInteger count = new AtomicInteger(0);
         AtomicInteger skipped = new AtomicInteger(0);
+        AtomicInteger timeout = new AtomicInteger(0);
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (Map.Entry<UUID, String> entry : targets.entrySet()) {
@@ -952,18 +955,32 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             futures.add(future);
         }
 
-        // 等待所有发送完成
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).thenRun(() -> {
-            int sent = count.get();
-            int skip = skipped.get();
-            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
-                if (skip > 0 && !sender.hasPermission("mailsystem.admin")) {
-                    sender.sendMessage("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc + "，§c跳过 " + skip + " 个邮箱已满的玩家");
-                } else {
-                    sender.sendMessage("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
+        // 等待所有发送完成，带超时
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+            .orTimeout(plugin.getMailConfig().getBroadcastTimeout(), java.util.concurrent.TimeUnit.SECONDS)
+            .whenComplete((result, throwable) -> {
+                int sent = count.get();
+                int skip = skipped.get();
+                int to = 0;
+                if (throwable != null) {
+                    // 超时发生，计算超时数量
+                    to = (int) futures.stream().filter(f -> !f.isDone()).count();
+                    timeout.set(to);
+                    // 取消未完成的 future
+                    futures.forEach(f -> f.cancel(true));
                 }
+                final int finalTimeout = to;
+                Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                    StringBuilder msg = new StringBuilder("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
+                    if (skip > 0) {
+                        msg.append("，§c跳过 " + skip + " 个邮箱已满的玩家");
+                    }
+                    if (finalTimeout > 0) {
+                        msg.append("，§c" + finalTimeout + " 个发送超时");
+                    }
+                    sender.sendMessage(msg.toString());
+                });
             });
-        });
     }
 
     private void handleManage(Player player, String[] args) {

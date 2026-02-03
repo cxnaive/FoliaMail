@@ -272,6 +272,11 @@ getMailCountAsync(playerUuid, count -> {
 | 15 | PlayerChat兼容性问题 | `ComposeGUI.java`, `InboxGUI.java`, `AdminMailManageGUI.java`, `MailCommand.java` | 同时监听AsyncChatEvent和AsyncPlayerChatEvent |
 | 16 | getDisplayName弃用 | `MailCommand.java` | 改用Adventure Component API |
 | 17 | setCustomModelData弃用 | `ItemBuilder.java` | 添加@SuppressWarnings注解 |
+| 18 | PlayerCacheManager线程安全 | `PlayerCacheManager.java` | HashMap改为ConcurrentHashMap |
+| 19 | EconomyManager原子性 | `EconomyManager.java` | 直接扣除，消除查扣间隙 |
+| 20 | ItemMeta空指针 | `MailCommand.java` | 添加null检查 |
+| 21 | 群发邮件超时 | `MailCommand.java`, `MailConfig.java` | 添加orTimeout超时机制 |
+| 22 | 群发超时配置 | `config.yml` | 新增broadcast-timeout配置项 |
 
 ### 关键修复代码
 
@@ -567,3 +572,42 @@ public String format(double amount) {
 - 聊天监听器现在同时监听 `AsyncChatEvent`（Paper新事件）和 `AsyncPlayerChatEvent`（Bukkit旧事件）
 - 旧事件处理器只取消事件，逻辑统一在新事件中处理，避免重复执行
 - 添加 `event.viewers().clear()` 和 `event.getRecipients().clear()` 双重保险防止消息泄露
+
+---
+
+### 代码安全修复（2026-02-04）
+
+**修复问题：**
+
+| # | 问题 | 严重程度 | 文件 | 修复方案 |
+|---|------|---------|------|----------|
+| 18 | PlayerCacheManager线程安全 | 高 | `PlayerCacheManager.java` | 成员变量`HashMap`改为`ConcurrentHashMap`，避免异步访问数据竞争 |
+| 19 | EconomyManager扣费非原子性 | 高 | `EconomyManager.java` | 移除预检查余额，直接调用`changePlayerBalance()`，依赖API返回值判断，消除查扣间隙 |
+| 20 | ItemMeta空指针风险 | 中 | `MailCommand.java` | 添加`meta != null`检查后再调用`hasDisplayName()` |
+| 21 | 群发邮件缺少超时机制 | 中 | `MailCommand.java` | 使用`CompletableFuture.orTimeout()`，默认30秒超时，防止无限等待 |
+| 22 | 群发超时硬编码 | 低 | `MailConfig.java`, `config.yml` | 新增`broadcast-timeout`配置项 |
+
+**群发超时修复代码：**
+
+```java
+// 使用配置的超时时间，默认30秒
+CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+    .orTimeout(plugin.getMailConfig().getBroadcastTimeout(), TimeUnit.SECONDS)
+    .whenComplete((result, throwable) -> {
+        if (throwable != null) {
+            // 超时发生，计算超时数量
+            int timeoutCount = (int) futures.stream()
+                .filter(f -> !f.isDone()).count();
+            // 取消未完成的 future
+            futures.forEach(f -> f.cancel(true));
+        }
+        // 发送结果消息给管理员...
+    });
+```
+
+**配置文件更新：**
+```yaml
+mail:
+  # 群发邮件超时时间（秒）
+  broadcast-timeout: 30
+```

@@ -7,6 +7,7 @@ import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -25,9 +26,9 @@ public class PlayerCacheManager {
     public PlayerCacheManager(MailSystemPlugin plugin) {
         this.plugin = plugin;
         this.databaseQueue = plugin.getDatabaseQueue();
-        this.nameToUuidCache = new HashMap<>();
-        this.uuidToNameCache = new HashMap<>();
-        this.uuidToLastSeenCache = new HashMap<>();
+        this.nameToUuidCache = new ConcurrentHashMap<>();
+        this.uuidToNameCache = new ConcurrentHashMap<>();
+        this.uuidToLastSeenCache = new ConcurrentHashMap<>();
     }
 
     /**

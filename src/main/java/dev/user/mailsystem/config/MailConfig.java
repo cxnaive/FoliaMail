@@ -23,6 +23,7 @@ public class MailConfig {
     private int crossServerCheckInterval;
     private int maxMailboxSize;
     private int dailySendLimit;
+    private int broadcastTimeout;
 
     // 经济设置
     private double mailPostageFee;
@@ -61,6 +62,7 @@ public class MailConfig {
         this.crossServerCheckInterval = plugin.getConfig().getInt("mail.cross-server-check-interval", 10);
         this.maxMailboxSize = plugin.getConfig().getInt("mail.max-mailbox-size", 100);
         this.dailySendLimit = plugin.getConfig().getInt("mail.daily-send-limit", 0);
+        this.broadcastTimeout = plugin.getConfig().getInt("mail.broadcast-timeout", 30);
 
         // 经济配置
         this.enableEconomy = plugin.getConfig().getBoolean("economy.enabled", true);
@@ -141,6 +143,10 @@ public class MailConfig {
 
     public int getDailySendLimit() {
         return dailySendLimit;
+    }
+
+    public int getBroadcastTimeout() {
+        return broadcastTimeout;
     }
 
     public double getMailPostageFee() {

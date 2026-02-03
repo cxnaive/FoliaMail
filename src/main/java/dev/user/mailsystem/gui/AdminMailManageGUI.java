@@ -45,6 +45,7 @@ public class AdminMailManageGUI implements InventoryHolder {
     private static final int SLOT_BACK = 49;
     private static final int SLOT_INFO = 47;
     private static final int SLOT_CLEAR = 51;
+    private static final int SLOT_BLACKLIST = 52;
 
     public AdminMailManageGUI(MailSystemPlugin plugin, GUIManager guiManager, UUID targetUuid, String targetName, int page) {
         this.plugin = plugin;
@@ -156,6 +157,18 @@ public class AdminMailManageGUI implements InventoryHolder {
                     .setGlowing(true)
                     .build());
         }
+
+        // 黑名单管理按钮
+        inventory.setItem(SLOT_BLACKLIST, new ItemBuilder(Material.IRON_BARS)
+                .setName("§8§l管理黑名单")
+                .setLore(
+                        "§7目标: §f" + targetName,
+                        "§7点击查看/管理该玩家的黑名单",
+                        "§7被屏蔽的玩家无法给该玩家发送邮件",
+                        "",
+                        "§e点击查看"
+                )
+                .build());
     }
 
     /**
@@ -252,6 +265,10 @@ public class AdminMailManageGUI implements InventoryHolder {
                 if (!mails.isEmpty()) {
                     handleClearInbox(player);
                 }
+                return true;
+            }
+            case SLOT_BLACKLIST -> {
+                openBlacklistManage(player);
                 return true;
             }
             default -> {
@@ -398,6 +415,247 @@ public class AdminMailManageGUI implements InventoryHolder {
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
             player.getScheduler().run(plugin, t -> guiManager.openAdminMailManage(player, targetUuid, targetName, currentPage), null);
         }, 10);
+    }
+
+    /**
+     * 打开黑名单管理
+     */
+    private void openBlacklistManage(Player player) {
+        player.closeInventory();
+        player.sendMessage("§6======== 黑名单管理 - " + targetName + " ========");
+        player.sendMessage("§e1. §f查看黑名单列表");
+        player.sendMessage("§e2. §f添加玩家到黑名单");
+        player.sendMessage("§e3. §f从黑名单移除玩家");
+        player.sendMessage("§c0. §f返回");
+        player.sendMessage("§7请在聊天框输入数字选择:");
+
+        org.bukkit.event.Listener listener = new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+            public void onChat(AsyncChatEvent event) {
+                if (!event.getPlayer().equals(player)) return;
+                event.setCancelled(true);
+                event.viewers().clear();
+                handleBlacklistSelect(player, PlainTextComponentSerializer.plainText().serialize(event.message()).trim(), this);
+            }
+
+            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+            public void onLegacyChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+                if (!event.getPlayer().equals(player)) return;
+                event.setCancelled(true);
+                event.getRecipients().clear();
+            }
+
+            private void handleBlacklistSelect(Player player, String message, org.bukkit.event.Listener listener) {
+                org.bukkit.event.HandlerList.unregisterAll(listener);
+
+                switch (message) {
+                    case "1" -> showBlacklistList(player);
+                    case "2" -> startAddBlacklist(player);
+                    case "3" -> startRemoveBlacklist(player);
+                    case "0", "cancel" -> {
+                        player.sendMessage("§c已返回。");
+                        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
+                            player.getScheduler().run(plugin, t -> guiManager.openAdminMailManage(player, targetUuid, targetName, currentPage), null);
+                        }, 5);
+                    }
+                    default -> {
+                        player.sendMessage("§c无效选项，请重新输入 (0-3):");
+                        guiManager.registerChatListener(player.getUniqueId(), listener);
+                    }
+                }
+            }
+        };
+        guiManager.registerChatListener(player.getUniqueId(), listener);
+    }
+
+    /**
+     * 显示黑名单列表
+     */
+    private void showBlacklistList(Player player) {
+        plugin.getMailManager().getBlacklist(targetUuid, blacklist -> {
+            if (blacklist.isEmpty()) {
+                Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                    player.sendMessage("§a[邮件系统] §e" + targetName + " §e的黑名单是空的。");
+                    Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                        player.getScheduler().run(plugin, task2 -> openBlacklistManage(player), null);
+                    }, 10);
+                });
+                return;
+            }
+
+            player.sendMessage("§6======== " + targetName + " 的黑名单 ========");
+            int[] count = {0};
+            for (UUID blockedUuid : blacklist) {
+                plugin.getPlayerCacheManager().getPlayerName(blockedUuid, name -> {
+                    String displayName = name != null ? name : blockedUuid.toString().substring(0, 8);
+                    int num = ++count[0];
+                    Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                        player.sendMessage("§e" + num + ". §f" + displayName + " §7(" + blockedUuid.toString().substring(0, 8) + ")");
+                    });
+                });
+            }
+
+            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
+                player.getScheduler().run(plugin, t -> openBlacklistManage(player), null);
+            }, 20);
+        });
+    }
+
+    /**
+     * 开始添加黑名单
+     */
+    private void startAddBlacklist(Player player) {
+        player.sendMessage("§6======== 添加黑名单 ========");
+        player.sendMessage("§7请输入要添加到 §e" + targetName + " §7黑名单的玩家名称：");
+        player.sendMessage("§7输入 §e'cancel' §7取消操作");
+
+        org.bukkit.event.Listener listener = new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+            public void onChat(AsyncChatEvent event) {
+                if (!event.getPlayer().equals(player)) return;
+                event.setCancelled(true);
+                event.viewers().clear();
+                handleAddInput(player, PlainTextComponentSerializer.plainText().serialize(event.message()).trim(), this);
+            }
+
+            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+            public void onLegacyChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+                if (!event.getPlayer().equals(player)) return;
+                event.setCancelled(true);
+                event.getRecipients().clear();
+            }
+
+            private void handleAddInput(Player player, String input, org.bukkit.event.Listener listener) {
+                guiManager.unregisterChatListener(player.getUniqueId());
+
+                if (input.equalsIgnoreCase("cancel")) {
+                    player.sendMessage("§c已取消。");
+                    Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
+                        player.getScheduler().run(plugin, t -> openBlacklistManage(player), null);
+                    }, 5);
+                    return;
+                }
+
+                // 查询玩家UUID
+                plugin.getPlayerCacheManager().getPlayerUuid(input, blockedUuid -> {
+                    if (blockedUuid == null) {
+                        Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                            player.sendMessage("§c玩家不存在或从未加入过服务器！");
+                            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                                player.getScheduler().run(plugin, t2 -> openBlacklistManage(player), null);
+                            }, 10);
+                        });
+                        return;
+                    }
+
+                    // 检查是否是自己
+                    if (blockedUuid.equals(targetUuid)) {
+                        Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                            player.sendMessage("§c玩家不能屏蔽自己！");
+                            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                                player.getScheduler().run(plugin, t2 -> openBlacklistManage(player), null);
+                            }, 10);
+                        });
+                        return;
+                    }
+
+                    // 添加到黑名单
+                    plugin.getMailManager().addToBlacklist(targetUuid, blockedUuid, success -> {
+                        Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                            if (success) {
+                                player.sendMessage("§a[邮件系统] §e已将 §f" + input + " §e添加到 §f" + targetName + " §e的黑名单中。");
+                            } else {
+                                player.sendMessage("§c[邮件系统] 添加失败，该玩家可能已在黑名单中。");
+                            }
+                            Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                                player.getScheduler().run(plugin, t2 -> openBlacklistManage(player), null);
+                            }, 10);
+                        });
+                    });
+                });
+            }
+        };
+        guiManager.registerChatListener(player.getUniqueId(), listener);
+    }
+
+    /**
+     * 开始移除黑名单
+     */
+    private void startRemoveBlacklist(Player player) {
+        plugin.getMailManager().getBlacklist(targetUuid, blacklist -> {
+            if (blacklist.isEmpty()) {
+                Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                    player.sendMessage("§a[邮件系统] §e" + targetName + " §e的黑名单是空的。");
+                    Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                        player.getScheduler().run(plugin, task2 -> openBlacklistManage(player), null);
+                    }, 10);
+                });
+                return;
+            }
+
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                player.sendMessage("§6======== 从黑名单移除 ========");
+                player.sendMessage("§7请输入要从 §e" + targetName + " §7黑名单移除的玩家名称：");
+                player.sendMessage("§7输入 §e'cancel' §7取消操作");
+            });
+
+            org.bukkit.event.Listener listener = new org.bukkit.event.Listener() {
+                @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+                public void onChat(AsyncChatEvent event) {
+                    if (!event.getPlayer().equals(player)) return;
+                    event.setCancelled(true);
+                    event.viewers().clear();
+                    handleRemoveInput(player, PlainTextComponentSerializer.plainText().serialize(event.message()).trim(), this);
+                }
+
+                @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
+                public void onLegacyChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+                    if (!event.getPlayer().equals(player)) return;
+                    event.setCancelled(true);
+                    event.getRecipients().clear();
+                }
+
+                private void handleRemoveInput(Player player, String input, org.bukkit.event.Listener listener) {
+                    guiManager.unregisterChatListener(player.getUniqueId());
+
+                    if (input.equalsIgnoreCase("cancel")) {
+                        player.sendMessage("§c已取消。");
+                        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
+                            player.getScheduler().run(plugin, t -> openBlacklistManage(player), null);
+                        }, 5);
+                        return;
+                    }
+
+                    // 查询玩家UUID
+                    plugin.getPlayerCacheManager().getPlayerUuid(input, blockedUuid -> {
+                        if (blockedUuid == null) {
+                            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                                player.sendMessage("§c玩家不存在或从未加入过服务器！");
+                                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                                    player.getScheduler().run(plugin, t2 -> openBlacklistManage(player), null);
+                                }, 10);
+                            });
+                            return;
+                        }
+
+                        // 从黑名单移除
+                        plugin.getMailManager().removeFromBlacklist(targetUuid, blockedUuid, success -> {
+                            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                                if (success) {
+                                    player.sendMessage("§a[邮件系统] §e已将 §f" + input + " §e从 §f" + targetName + " §e的黑名单中移除。");
+                                } else {
+                                    player.sendMessage("§c[邮件系统] 移除失败，该玩家可能不在黑名单中。");
+                                }
+                                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, t -> {
+                                    player.getScheduler().run(plugin, t2 -> openBlacklistManage(player), null);
+                                }, 10);
+                            });
+                        });
+                    });
+                }
+            };
+            guiManager.registerChatListener(player.getUniqueId(), listener);
+        });
     }
 
     @Override

@@ -81,13 +81,10 @@ public class EconomyManager {
         if (amount <= 0) return true;
 
         try {
-            BigDecimal bal = xconomyAPI.getPlayerData(player.getUniqueId()).getBalance();
-            if (bal.compareTo(BigDecimal.valueOf(amount)) < 0) {
-                return false; // 余额不足
-            }
+            // 直接尝试扣除，依赖 XConomyAPI 的原子性保证
             // isadd = false 表示扣除
             int result = xconomyAPI.changePlayerBalance(player.getUniqueId(), player.getName(), BigDecimal.valueOf(amount), false);
-            return result == 0; // 0 表示成功
+            return result == 0; // 0 表示成功，其他值表示失败（如余额不足）
         } catch (Exception e) {
             plugin.getLogger().warning("扣除金钱失败: " + e.getMessage());
             return false;
