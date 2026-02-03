@@ -1,4 +1,4 @@
-name: MailSystem
+name: FoliaMail
 version: ${version}
 main: dev.user.mailsystem.MailSystemPlugin
 api-version: '1.21'

@@ -1,1 +1,1 @@
-rootProject.name = "mail_system"
+rootProject.name = "FoliaMail"

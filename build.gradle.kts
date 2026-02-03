@@ -39,7 +39,7 @@ tasks.withType<JavaCompile> {
 
 tasks.shadowJar {
     archiveClassifier.set("")
-    archiveFileName.set("mail_system-${version}.jar")
+    archiveFileName.set("FoliaMail-${version}.jar")
 
     // 重定位依赖包（SLF4J不重定位）
     relocate("org.h2", "dev.user.mailsystem.libs.org.h2")

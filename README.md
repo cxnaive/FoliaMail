@@ -1,4 +1,4 @@
-# MailSystem
+# FoliaMail
 
 [![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://papermc.io/)
@@ -18,7 +18,7 @@
 
 ## 安装
 
-1. 下载 `mail_system-1.0.1.jar`
+1. 下载 `FoliaMail-1.0.1.jar`
 2. 将 JAR 文件放入服务器的 `plugins` 文件夹
 3. 安装依赖插件：
    - [NBTAPI](https://www.spigotmc.org/resources/nbt-api.7939/)（必需）
@@ -116,7 +116,7 @@ cd mail_system
 # 构建项目
 ./gradlew build
 
-# 输出文件位于 build/libs/mail_system-1.0.1.jar
+# 输出文件位于 build/libs/FoliaMail-1.0.1.jar
 ```
 
 ## 技术特性
