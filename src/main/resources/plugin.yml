@@ -1,0 +1,36 @@
+name: MailSystem
+version: ${version}
+main: dev.user.mailsystem.MailSystemPlugin
+api-version: '1.21'
+folia-supported: true
+depend: [NBTAPI]
+softdepend: [XConomy]
+
+commands:
+  fmail:
+    description: 邮件系统主命令
+    aliases: [fmailsystem, fmails, fmsg]
+    permission: mailsystem.use
+    usage: /fmail <子命令>
+
+permissions:
+  mailsystem.use:
+    default: true
+    description: 使用邮件系统基础功能（打开GUI）
+    children:
+      mailsystem.read: true
+  mailsystem.read:
+    default: true
+    description: 查看收件箱和阅读邮件
+  mailsystem.send:
+    default: op
+    description: 发送邮件
+  mailsystem.attach:
+    default: op
+    description: 发送带附件的邮件
+  mailsystem.delete:
+    default: op
+    description: 删除自己的邮件
+  mailsystem.admin:
+    default: op
+    description: 邮件系统管理员权限（重载配置、清除缓存等）

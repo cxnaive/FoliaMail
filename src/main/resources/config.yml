@@ -1,0 +1,65 @@
+# =============================
+# MailSystem 多服务器邮件系统
+# =============================
+
+# 服务器ID（用于多服务器区分，留空则使用服务器名称）
+server:
+  id: ""
+
+# 数据库设置
+database:
+  # 数据库类型: mysql 或 h2
+  type: h2
+
+  # MySQL 设置（当 type 为 mysql 时使用）
+  mysql:
+    host: localhost
+    port: 3306
+    database: mailsystem
+    username: root
+    password: password
+    pool-size: 10
+
+  # H2 设置（当 type 为 h2 时使用）
+  h2:
+    filename: mailsystem
+
+  # 数据库超时设置（修改后需要重启服务器生效，reload命令不会重载这些配置）
+  timeout:
+    # 获取数据库连接超时（毫秒）
+    connection-timeout: 5000
+    # 查询执行超时（秒）
+    query-timeout: 10
+    # 数据库锁等待超时（秒，MySQL为lockWaitTimeout，H2为LOCK_TIMEOUT）
+    lock-wait-timeout: 5
+
+# 邮件设置
+mail:
+  # 最大附件数量
+  max-attachments: 5
+  # 邮件标题最大长度
+  max-title-length: 32
+  # 邮件内容最大长度
+  max-content-length: 500
+  # 邮件过期天数（0为永不过期）
+  expiration-days: 30
+  # 未读邮件检查间隔（秒）
+  unread-check-interval: 60
+  # 跨服务器新邮件检查间隔（秒）
+  # 用于多服务器环境下检测其他服务器发送的邮件
+  cross-server-check-interval: 10
+  # 玩家邮箱最大邮件数量（0为无限制）
+  max-mailbox-size: 20
+  # 玩家每日发送邮件上限（0为无限制，管理员权限 mailsystem.admin 不受此限制）
+  daily-send-limit: 10
+
+# 经济设置（需要安装 XConomy 插件）
+economy:
+  # 是否启用经济功能
+  enabled: true
+  # 货币单位（显示用，如 100 金币）
+  currency-name: "金币"
+  # 发送邮件基础邮费
+  mail-postage-fee: 10.0
+  # 每个附件的快递费
+  attachment-delivery-fee: 5.0

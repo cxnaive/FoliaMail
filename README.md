@@ -1,0 +1,139 @@
+# MailSystem
+
+[![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://papermc.io/)
+[![Folia](https://img.shields.io/badge/Folia-Supported-orange)](https://papermc.io/software/folia)
+
+一个功能完善的 Minecraft 多服务器同步邮件系统插件，支持 Folia/Paper 1.21+。
+
+## 功能特性
+
+- **多服务器同步** - 通过 MySQL 或 H2 数据库实现跨服务器邮件同步
+- **邮件附件** - 支持发送物品作为附件（使用 NBT + GZIP 压缩）
+- **GUI 界面** - 完整的图形界面（主菜单、收件箱、发件箱、写邮件、邮件详情）
+- **经济系统** - 可选 XConomy 集成，支持邮费功能
+- **每日限制** - 玩家每日发送邮件上限（管理员豁免）
+- **黑名单** - 玩家可屏蔽特定发送者
+- **Folia 兼容** - 完全支持 Folia 多线程服务器架构
+
+## 安装
+
+1. 下载 `mail_system-1.0.1.jar`
+2. 将 JAR 文件放入服务器的 `plugins` 文件夹
+3. 安装依赖插件：
+   - [NBTAPI](https://www.spigotmc.org/resources/nbt-api.7939/)（必需）
+   - [XConomy](https://github.com/YiC200333/XConomy)（可选，用于经济功能）
+4. 重启服务器
+5. 编辑 `plugins/MailSystem/config.yml` 配置数据库
+
+## 配置
+
+### 基本配置
+
+```yaml
+# 数据库设置
+database:
+  type: h2  # 或 mysql
+  # H2 设置（单服务器）
+  h2:
+    filename: mailsystem
+  # MySQL 设置（多服务器）
+  mysql:
+    host: localhost
+    port: 3306
+    database: mailsystem
+    username: root
+    password: password
+    pool-size: 10
+
+# 邮件设置
+mail:
+  max-attachments: 5          # 最大附件数量
+  max-title-length: 32        # 标题最大长度
+  max-content-length: 500     # 内容最大长度
+  expiration-days: 30         # 邮件过期天数（0为永不过期）
+  max-mailbox-size: 20        # 邮箱最大邮件数
+  daily-send-limit: 10        # 每日发送上限（0为无限制）
+
+# 经济设置
+economy:
+  enabled: true
+  currency-name: "金币"        # 货币单位
+  mail-postage-fee: 10.0      # 基础邮费
+  attachment-delivery-fee: 5.0 # 附件快递费/个
+```
+
+### 数据库超时配置
+
+```yaml
+database:
+  timeout:
+    connection-timeout: 5000   # 连接获取超时（毫秒）
+    query-timeout: 10          # 查询超时（秒）
+    lock-wait-timeout: 5       # 锁等待超时（秒）
+```
+
+**注意**：超时配置修改后需重启服务器生效，reload 命令不会重载。
+
+## 命令
+
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/fmail` | 打开邮件 GUI | `mailsystem.use` |
+| `/fmail send <玩家> <标题> [内容]` | 发送邮件 | `mailsystem.send` |
+| `/fmail write <玩家> <标题>` | 交互式编写邮件 | `mailsystem.send` |
+| `/fmail attach <玩家> [标题]` | 发送手持物品 | `mailsystem.attach` |
+| `/fmail read` | 查看未读邮件 | `mailsystem.read` |
+| `/fmail list [页码]` | 查看收件箱 | `mailsystem.read` |
+| `/fmail sent` | 查看已发送邮件 | `mailsystem.send` |
+| `/fmail open <邮件ID>` | 打开邮件详情 | `mailsystem.read` |
+| `/fmail claim <邮件ID>` | 领取附件 | `mailsystem.read` |
+| `/fmail delete <邮件ID>` | 删除邮件 | `mailsystem.delete` |
+| `/fmail clear` | 清空收件箱 | `mailsystem.delete` |
+| `/fmail blacklist add <玩家>` | 添加黑名单 | `mailsystem.use` |
+| `/fmail blacklist remove <玩家>` | 移除黑名单 | `mailsystem.use` |
+| `/fmail blacklist list` | 查看黑名单 | `mailsystem.use` |
+| `/fmail reload` | 重载配置 | `mailsystem.admin` |
+
+## 权限
+
+| 权限 | 描述 | 默认 |
+|------|------|------|
+| `mailsystem.use` | 使用邮件系统基础功能 | true |
+| `mailsystem.read` | 查看收件箱和阅读邮件 | true |
+| `mailsystem.send` | 发送邮件 | op |
+| `mailsystem.attach` | 发送带附件的邮件 | op |
+| `mailsystem.delete` | 删除自己的邮件 | op |
+| `mailsystem.admin` | 管理员权限（重载、管理等） | op |
+
+## 构建
+
+```bash
+# 克隆仓库
+git clone <repository-url>
+cd mail_system
+
+# 构建项目
+./gradlew build
+
+# 输出文件位于 build/libs/mail_system-1.0.1.jar
+```
+
+## 技术特性
+
+- **异步数据库操作** - 使用单线程队列执行数据库操作，避免阻塞主线程
+- **线程安全** - 使用 ConcurrentHashMap、CopyOnWriteArrayList 等线程安全集合
+- **性能优化** - 批量数据库插入、IN 子句分批查询、LRU 缓存机制
+- **熔断机制** - 数据库队列超载时自动拒绝新任务，保护服务器稳定性
+
+## 许可证
+
+MIT License
+
+## 致谢
+
+- [PaperMC](https://papermc.io/) - 服务端 API
+- [Folia](https://papermc.io/software/folia) - 多线程支持
+- [NBTAPI](https://github.com/tr7zw/Item-NBT-API) - NBT 序列化
+- [XConomy](https://github.com/YiC200333/XConomy) - 经济系统
+- [HikariCP](https://github.com/brettwooldridge/HikariCP) - 数据库连接池
