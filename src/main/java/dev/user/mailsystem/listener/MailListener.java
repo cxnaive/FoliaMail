@@ -116,9 +116,10 @@ public class MailListener implements Listener, Consumer<ScheduledTask> {
             // ComposeGUI关闭时暂时保留数据，因为可能是去输入收件人/标题/内容
             GUIManager.ComposeData data = plugin.getGuiManager().getPlayerComposeData(player.getUniqueId());
             if (data == null || (data.getReceiver() == null && data.getTitle() == null
-                    && (data.getAttachments() == null || data.getAttachments().isEmpty()))) {
-                // 如果什么都没填（包括没有附件），直接清理
-                
+                    && (data.getContent() == null || data.getContent().isEmpty())
+                    && (data.getAttachments() == null || data.getAttachments().isEmpty())
+                    && data.getMoneyAttachment() <= 0)) {
+                // 如果什么都没填（包括没有附件和金币），直接清理
                 plugin.getGuiManager().closeGUI(player);
             }
             // 否则保留数据，等待玩家重新打开或发送

@@ -209,6 +209,7 @@ public class GUIManager {
         private String title;
         private String content;
         private final List<ItemStack> attachments = new ArrayList<>();
+        private double moneyAttachment = 0; // 金币附件
         private boolean returned = false; // 标记附件是否已返还
         private boolean broadcastMode = false; // 是否为群发模式
         private final java.util.concurrent.atomic.AtomicBoolean processing = new java.util.concurrent.atomic.AtomicBoolean(false); // 发送处理中标记，防止快速点击
@@ -259,6 +260,14 @@ public class GUIManager {
 
         public int getAttachmentCount() {
             return attachments.size();
+        }
+
+        public double getMoneyAttachment() {
+            return moneyAttachment;
+        }
+
+        public void setMoneyAttachment(double moneyAttachment) {
+            this.moneyAttachment = moneyAttachment;
         }
 
         public boolean isReturned() {

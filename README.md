@@ -10,6 +10,7 @@
 
 - **多服务器同步** - 通过 MySQL 或 H2 数据库实现跨服务器邮件同步
 - **邮件附件** - 支持发送物品作为附件（使用 NBT + GZIP 压缩）
+- **金币附件** - 支持在邮件中附加金币（需要 `mailsystem.attach.money` 权限）
 - **GUI 界面** - 完整的图形界面（主菜单、收件箱、发件箱、写邮件、邮件详情）
 - **经济系统** - 可选 XConomy 集成，支持邮费功能
 - **每日限制** - 玩家每日发送邮件上限（管理员豁免）
@@ -60,7 +61,7 @@ economy:
   enabled: true
   currency-name: "金币"        # 货币单位
   mail-postage-fee: 10.0      # 基础邮费
-  attachment-delivery-fee: 5.0 # 附件快递费/个
+  attachment-delivery-fee: 5.0 # 物品附件快递费/个
 ```
 
 ### 数据库超时配置
@@ -83,6 +84,7 @@ database:
 | `/fmail send <玩家> <标题> [内容]` | 发送邮件 | `mailsystem.send` |
 | `/fmail write <玩家> <标题>` | 交互式编写邮件 | `mailsystem.send` |
 | `/fmail attach <玩家> [标题]` | 发送手持物品 | `mailsystem.attach` |
+| `/fmail money <玩家> <金额> [标题]` | 发送金币 | `mailsystem.attach.money` |
 | `/fmail read` | 查看未读邮件 | `mailsystem.read` |
 | `/fmail list [页码]` | 查看收件箱 | `mailsystem.read` |
 | `/fmail sent` | 查看已发送邮件 | `mailsystem.send` |
@@ -102,7 +104,8 @@ database:
 | `mailsystem.use` | 使用邮件系统基础功能 | true |
 | `mailsystem.read` | 查看收件箱和阅读邮件 | true |
 | `mailsystem.send` | 发送邮件 | op |
-| `mailsystem.attach` | 发送带附件的邮件 | op |
+| `mailsystem.attach` | 发送带物品附件的邮件 | op |
+| `mailsystem.attach.money` | 发送带金币附件的邮件 | op |
 | `mailsystem.delete` | 删除自己的邮件 | op |
 | `mailsystem.admin` | 管理员权限（重载、管理等） | op |
 

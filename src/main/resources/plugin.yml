@@ -27,7 +27,10 @@ permissions:
     description: 发送邮件
   mailsystem.attach:
     default: op
-    description: 发送带附件的邮件
+    description: 发送带物品附件的邮件
+  mailsystem.attach.money:
+    default: op
+    description: 发送带金币附件的邮件
   mailsystem.delete:
     default: op
     description: 删除自己的邮件

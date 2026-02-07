@@ -73,6 +73,22 @@ public class MailViewGUI implements InventoryHolder {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         String dateStr = sdf.format(new Date(mail.getSentTime()));
 
+        // 构建附件状态文本
+        String attachStatus;
+        if (mail.hasAttachments()) {
+            boolean hasItems = mail.hasItemAttachments();
+            boolean hasMoney = mail.getMoneyAttachment() > 0;
+            if (hasItems && hasMoney) {
+                attachStatus = mail.isClaimed() ? "§7已领取" : "§6未领取(物品+金币)";
+            } else if (hasMoney) {
+                attachStatus = mail.isClaimed() ? "§7已领取" : "§6未领取(金币)";
+            } else {
+                attachStatus = mail.isClaimed() ? "§7已领取" : "§6未领取(物品)";
+            }
+        } else {
+            attachStatus = "§7无";
+        }
+
         // 邮件信息
         inventory.setItem(10, new ItemBuilder(Material.PAPER)
                 .setName("§e邮件信息")
@@ -81,7 +97,7 @@ public class MailViewGUI implements InventoryHolder {
                         "§7收件人: §f" + mail.getReceiverName(),
                         "§7发送时间: §f" + dateStr,
                         "§7状态: " + (mail.isRead() ? "§7已读" : "§a未读"),
-                        "§7附件: " + (mail.hasAttachments() ? (mail.isClaimed() ? "§7已领取" : "§6未领取") : "§7无")
+                        "§7附件: " + attachStatus
                 )
                 .build());
 
@@ -104,6 +120,7 @@ public class MailViewGUI implements InventoryHolder {
         // 附件区域
         if (mail.hasAttachments()) {
             List<ItemStack> attachments = mail.getAttachments();
+            // 显示物品附件
             for (int i = 0; i < attachments.size() && i < 7; i++) {
                 int slot = ATTACHMENT_START + i;
                 ItemStack item = attachments.get(i);
@@ -112,11 +129,26 @@ public class MailViewGUI implements InventoryHolder {
                 }
             }
 
+            // 如果有金币附件，在槽位35显示金币信息
+            if (mail.getMoneyAttachment() > 0) {
+                inventory.setItem(35, new ItemBuilder(Material.GOLD_INGOT)
+                        .setName("§6§l金币附件")
+                        .setLore(
+                                "§7金额: §f" + plugin.getEconomyManager().format(mail.getMoneyAttachment()),
+                                "§7领取后将直接存入你的账户"
+                        )
+                        .build());
+            }
+
             // 领取附件按钮
             if (!mail.isClaimed()) {
+                String claimLore = mail.getMoneyAttachment() > 0 && !attachments.isEmpty()
+                        ? "§7包含物品和金币附件"
+                        : (mail.getMoneyAttachment() > 0 ? "§7包含金币附件" : "§7包含物品附件");
                 inventory.setItem(SLOT_CLAIM, new ItemBuilder(Material.CHEST)
                         .setName("§a§l领取附件")
                         .setLore(
+                                claimLore,
                                 "§7点击领取所有附件",
                                 "§7附件将放入你的背包",
                                 "",

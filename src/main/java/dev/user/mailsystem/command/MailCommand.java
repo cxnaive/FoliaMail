@@ -89,6 +89,10 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                 if (!checkPermission(player, "mailsystem.attach")) return true;
                 handleAttach(player, args);
             }
+            case "money" -> {
+                if (!checkPermission(player, "mailsystem.attach.money")) return true;
+                handleMoney(player, args);
+            }
             case "broadcast", "bc" -> {
                 if (!player.hasPermission("mailsystem.admin")) {
                     player.sendMessage("§c你没有权限使用群发功能！");
@@ -132,6 +136,9 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             if (player.hasPermission("mailsystem.attach")) {
                 completions.add("attach");
             }
+            if (player.hasPermission("mailsystem.attach.money")) {
+                completions.add("money");
+            }
             // 黑名单命令
             completions.addAll(Arrays.asList("blacklist", "bl"));
             // 管理员命令
@@ -147,7 +154,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             String sub = args[0].toLowerCase();
             // 需要玩家名称补全的命令
-            if (sub.equals("send") || sub.equals("write") || sub.equals("attach")) {
+            if (sub.equals("send") || sub.equals("write") || sub.equals("attach") || sub.equals("money")) {
                 return Bukkit.getOnlinePlayers().stream()
                         .map(Player::getName)
                         .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
@@ -425,7 +432,14 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             for (int i = start; i < end; i++) {
                 Mail mail = mails.get(i);
                 String status = mail.isRead() ? "§7[已读]" : "§a[未读]";
-                String attach = mail.hasAttachments() ? " §6[附件]" : "";
+                String attach = "";
+                if (mail.hasAttachments()) {
+                    if (mail.getMoneyAttachment() > 0 && !mail.hasItemAttachments()) {
+                        attach = " §6[金币]";
+                    } else {
+                        attach = " §6[附件]";
+                    }
+                }
 
                 Component line = Component.text(status + " §e[" + mail.getSenderName() + "] §f" + mail.getTitle() + attach)
                         .clickEvent(ClickEvent.runCommand("/fmail open " + mail.getId().toString().substring(0, 8)))
@@ -499,6 +513,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
 
             if (target.hasAttachments()) {
                 player.sendMessage("§6-------- 附件 --------");
+                // 显示物品附件
                 for (int i = 0; i < target.getAttachments().size(); i++) {
                     ItemStack item = target.getAttachments().get(i);
                     if (item != null) {
@@ -513,6 +528,10 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                         }
                         player.sendMessage("§e" + (i + 1) + ". §f" + item.getAmount() + "x " + itemName);
                     }
+                }
+                // 显示金币附件
+                if (target.getMoneyAttachment() > 0) {
+                    player.sendMessage("§e金币: §f" + plugin.getEconomyManager().format(target.getMoneyAttachment()));
                 }
 
                 if (!target.isClaimed()) {
@@ -698,6 +717,83 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         });
     }
 
+    private void handleMoney(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage("§c用法: /fmail money <玩家> <金额> [标题]");
+            return;
+        }
+
+        String targetName = args[1];
+        double amount;
+        try {
+            amount = Double.parseDouble(args[2]);
+        } catch (NumberFormatException e) {
+            player.sendMessage("§c金额必须是数字！");
+            return;
+        }
+
+        if (amount <= 0) {
+            player.sendMessage("§c金额必须大于0！");
+            return;
+        }
+
+        String title = args.length > 3 ? args[3] : "金币邮件";
+
+        // 检查经济功能是否启用
+        if (!plugin.getMailConfig().isEnableEconomy() || !plugin.getEconomyManager().isEnabled()) {
+            player.sendMessage("§c经济功能未启用！");
+            return;
+        }
+
+        // 检查余额
+        if (!plugin.getEconomyManager().hasEnough(player, amount)) {
+            player.sendMessage("§c余额不足！当前余额: §f" +
+                plugin.getEconomyManager().format(plugin.getEconomyManager().getBalance(player)));
+            return;
+        }
+
+        // 先尝试获取在线玩家
+        Player onlineTarget = Bukkit.getPlayer(targetName);
+        if (onlineTarget != null) {
+            sendMoneyMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, amount);
+            return;
+        }
+
+        // 异步查询离线玩家缓存
+        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
+        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
+            if (uuid == null) {
+                player.sendMessage("§c玩家不存在或从未加入过服务器！");
+                return;
+            }
+            // 获取玩家名
+            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
+                String finalName = cachedName != null ? cachedName : targetName;
+                sendMoneyMail(player, uuid, finalName, title, amount);
+            });
+        });
+    }
+
+    private void sendMoneyMail(Player sender, UUID targetUuid, String targetName, String title, double amount) {
+        // 计算费用（金币附件也需要基础邮费）
+        double totalCost = 0;
+        if (plugin.getMailConfig().isEnableEconomy() && plugin.getEconomyManager().isEnabled()) {
+            totalCost = plugin.getMailConfig().getMailPostageFee() + amount;
+        }
+
+        Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
+                targetUuid, targetName, title, "§e这是一封包含金币的邮件，请领取附件。");
+        mail.setMoneyAttachment(amount);
+
+        plugin.getMailManager().sendMail(mail, sender, totalCost, success -> {
+            if (success) {
+                sender.sendMessage("§a金币邮件已发送给 §e" + targetName + " §a，金额: §f" +
+                    plugin.getEconomyManager().format(amount));
+            }
+            // 失败提示和扣费提示已在 sendMail 方法中处理
+        });
+    }
+
     private void handleClearCache(Player player) {
         if (!player.hasPermission("mailsystem.admin")) {
             player.sendMessage("§c你没有权限！");
@@ -839,6 +935,9 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/fmail send <玩家> <标题> [内容] §f- 发送邮件");
         player.sendMessage("§e/fmail write <玩家> <标题> §f- 交互式编写邮件");
         player.sendMessage("§e/fmail attach <玩家> [标题] §f- 发送手持物品");
+        if (player.hasPermission("mailsystem.attach.money")) {
+            player.sendMessage("§e/fmail money <玩家> <金额> [标题] §f- 发送金币");
+        }
         player.sendMessage("§e/fmail read §f- 查看未读邮件");
         player.sendMessage("§e/fmail list [页码] §f- 查看收件箱");
         player.sendMessage("§e/fmail sent §f- 查看已发送");

@@ -163,6 +163,7 @@ public class DatabaseManager {
                     "title VARCHAR(100) NOT NULL, " +
                     "content " + longTextType + ", " +
                     "attachments " + blobType + ", " +
+                    "money_attachment DOUBLE DEFAULT 0, " +
                     "sent_time BIGINT NOT NULL, " +
                     "expire_time BIGINT NOT NULL, " +
                     "is_read BOOLEAN DEFAULT FALSE, " +
@@ -170,6 +171,9 @@ public class DatabaseManager {
                     "read_time BIGINT DEFAULT 0, " +
                     "server_id VARCHAR(50) DEFAULT ''" +
                     ")");
+
+            // 检查并添加 money_attachment 列（兼容旧版本数据库）
+            addColumnIfNotExists(conn, "mails", "money_attachment", "DOUBLE DEFAULT 0", isMySQL);
 
             // 创建索引（MySQL 和 H2 语法不同）
             createIndexIfNotExists(conn, "mails", "idx_receiver", "receiver_uuid", isMySQL);
@@ -246,6 +250,38 @@ public class DatabaseManager {
             } else {
                 // H2: 使用 IF NOT EXISTS
                 stmt.executeUpdate(String.format("CREATE INDEX IF NOT EXISTS %s ON %s(%s)", indexName, table, column));
+            }
+        }
+    }
+
+    /**
+     * 添加列（如果不存在）
+     */
+    private void addColumnIfNotExists(Connection conn, String table, String column, String columnDef, boolean isMySQL) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            if (isMySQL) {
+                // MySQL: 查询 information_schema 检查列是否存在
+                String checkSql = String.format(
+                    "SELECT 1 FROM information_schema.COLUMNS " +
+                    "WHERE TABLE_SCHEMA = DATABASE() " +
+                    "AND TABLE_NAME = '%s' " +
+                    "AND COLUMN_NAME = '%s'",
+                    table, column
+                );
+                try (java.sql.ResultSet rs = stmt.executeQuery(checkSql)) {
+                    if (!rs.next()) {
+                        stmt.executeUpdate(String.format("ALTER TABLE %s ADD COLUMN %s %s", table, column, columnDef));
+                        plugin.getLogger().info("数据库表 " + table + " 已添加列: " + column);
+                    }
+                }
+            } else {
+                // H2: 使用 ALTER TABLE IF NOT EXISTS
+                try {
+                    stmt.executeUpdate(String.format("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s %s", table, column, columnDef));
+                } catch (SQLException e) {
+                    // H2 旧版本可能不支持 IF NOT EXISTS，忽略错误
+                    plugin.getLogger().fine("添加列 " + column + " 时出错（可能已存在）: " + e.getMessage());
+                }
             }
         }
     }

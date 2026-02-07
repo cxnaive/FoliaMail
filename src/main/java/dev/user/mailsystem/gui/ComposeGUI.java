@@ -41,7 +41,8 @@ public class ComposeGUI implements InventoryHolder {
     private static final int SLOT_RECEIVER = 10;
     private static final int SLOT_TITLE = 12;
     private static final int SLOT_CONTENT = 14;
-    private static final int SLOT_BROADCAST = 16;  // 群发模式按钮
+    private static final int SLOT_MONEY = 16;      // 金币附件按钮
+    private static final int SLOT_BROADCAST = 25;  // 群发模式按钮（移动到25）
     private static final int SLOT_BACK = 45;
     private static final int SLOT_CLEAR = 47;
     private static final int SLOT_SEND = 49;
@@ -142,6 +143,31 @@ public class ComposeGUI implements InventoryHolder {
                 .setLore(contentLore.toArray(new String[0]))
                 .build());
 
+        // 金币附件设置（仅管理员或有权限玩家可见）
+        boolean canAttachMoney = player.hasPermission("mailsystem.attach.money") || player.hasPermission("mailsystem.admin");
+        double moneyAttachment = data.getMoneyAttachment();
+        if (canAttachMoney) {
+            inventory.setItem(SLOT_MONEY, new ItemBuilder(Material.GOLD_INGOT)
+                    .setName("§6§l设置金币附件")
+                    .setLore(
+                            "§7当前: " + (moneyAttachment > 0 ? "§f" + plugin.getEconomyManager().format(moneyAttachment) : "§c未设置"),
+                            "",
+                            "§7点击输入要附加的金币数量",
+                            "§7收件人领取邮件时将获得这些金币",
+                            "",
+                            "§c注意: 发送时会立即扣除你的金币"
+                    )
+                    .build());
+        } else {
+            inventory.setItem(SLOT_MONEY, new ItemBuilder(Material.GOLD_INGOT)
+                    .setName("§7§l金币附件")
+                    .setLore(
+                            "§7你没有权限发送金币附件",
+                            "§7需要权限: §fmailsystem.attach.money"
+                    )
+                    .build());
+        }
+
         // 附件区域说明（槽位19不是附件区域，只是说明）
         double deliveryFee = plugin.getMailConfig().getAttachmentDeliveryFee();
         boolean economyEnabled = plugin.getMailConfig().isEnableEconomy() && plugin.getEconomyManager().isEnabled();
@@ -217,20 +243,26 @@ public class ComposeGUI implements InventoryHolder {
             sendButtonName = canSend ? "§a§l发送邮件" : "§c§l无法发送";
             // 添加费用信息到lore
             double postageFee = plugin.getMailConfig().getMailPostageFee();
+            double moneyAttach = data.getMoneyAttachment();
             String feeInfo = "";
             if (plugin.getMailConfig().isEnableEconomy() && plugin.getEconomyManager().isEnabled()) {
-                if (postageFee > 0 || deliveryFee > 0) {
+                if (postageFee > 0 || deliveryFee > 0 || moneyAttach > 0) {
                     feeInfo = "§7费用: §f基础邮费 " + plugin.getEconomyManager().format(postageFee);
                     if (deliveryFee > 0) {
                         feeInfo += " + 快递费 " + plugin.getEconomyManager().format(deliveryFee) + "/个";
                     }
+                    if (moneyAttach > 0) {
+                        feeInfo += " + 金币附件 " + plugin.getEconomyManager().format(moneyAttach);
+                    }
                 }
             }
             String finalFeeInfo = feeInfo;
+            String moneyInfo = moneyAttach > 0 ? "§7金币附件: §f" + plugin.getEconomyManager().format(moneyAttach) : "";
             sendButtonLore = canSend ?
                     new String[]{
                             "§7收件人: §f" + receiver,
                             "§7标题: §f" + title,
+                            moneyInfo.isEmpty() ? "" : moneyInfo,
                             "",
                             finalFeeInfo.isEmpty() ? "" : finalFeeInfo,
                             finalFeeInfo.isEmpty() ? "" : "",
@@ -344,6 +376,26 @@ public class ComposeGUI implements InventoryHolder {
                 player.sendMessage("§7最大长度: " + plugin.getMailConfig().getMaxMailContentLength());
 
                 registerChatListener(player, "content");
+                return true;
+            }
+            case SLOT_MONEY -> {
+                // 检查权限
+                if (!player.hasPermission("mailsystem.attach.money") && !player.hasPermission("mailsystem.admin")) {
+                    player.sendMessage("§c你没有权限发送金币附件！");
+                    return true;
+                }
+                // 检查经济功能是否启用
+                if (!plugin.getMailConfig().isEnableEconomy() || !plugin.getEconomyManager().isEnabled()) {
+                    player.sendMessage("§c经济功能未启用，无法发送金币附件！");
+                    return true;
+                }
+                player.closeInventory();
+                player.sendMessage("§a[邮件系统] §e请在聊天框输入要附加的金币数量:");
+                player.sendMessage("§7输入 'cancel' 取消");
+                player.sendMessage("§7输入 '0' 或 'clear' 清除金币附件");
+                player.sendMessage("§7当前余额: §f" + plugin.getEconomyManager().format(plugin.getEconomyManager().getBalance(player)));
+
+                registerChatListener(player, "money");
                 return true;
             }
             case SLOT_BROADCAST -> {
@@ -494,6 +546,41 @@ public class ComposeGUI implements InventoryHolder {
                         data.setContent(message);
                         player.sendMessage("§a内容已设置");
                     }
+                    case "money" -> {
+                        // 处理清除命令
+                        if (message.equalsIgnoreCase("clear") || message.equals("0")) {
+                            data.setMoneyAttachment(0);
+                            player.sendMessage("§a金币附件已清除");
+                            break;
+                        }
+                        // 解析金额
+                        double amount;
+                        try {
+                            amount = Double.parseDouble(message);
+                        } catch (NumberFormatException e) {
+                            player.sendMessage("§c无效的数字格式！请输入有效的金币数量:");
+                            return;
+                        }
+                        // 检查金额有效性
+                        if (amount < 0) {
+                            player.sendMessage("§c金币数量不能为负数！请重新输入:");
+                            return;
+                        }
+                        if (amount == 0) {
+                            data.setMoneyAttachment(0);
+                            player.sendMessage("§a金币附件已清除");
+                            break;
+                        }
+                        // 检查余额
+                        double balance = plugin.getEconomyManager().getBalance(player);
+                        if (balance < amount) {
+                            player.sendMessage("§c余额不足！当前余额: §f" + plugin.getEconomyManager().format(balance) + "§c，请重新输入:");
+                            return;
+                        }
+                        // 设置金币附件
+                        data.setMoneyAttachment(amount);
+                        player.sendMessage("§a金币附件已设置为: §e" + plugin.getEconomyManager().format(amount));
+                    }
                 }
 
                 guiManager.setPlayerComposeData(player.getUniqueId(), data);
@@ -550,10 +637,11 @@ public class ComposeGUI implements InventoryHolder {
 
         // 添加附件（从ComposeData）
         List<ItemStack> attachments = data.getAttachments();
+        double moneyAttachment = data.getMoneyAttachment();
         if (!attachments.isEmpty()) {
             // 检查附件权限
             if (!player.hasPermission("mailsystem.attach")) {
-                player.sendMessage("§c你没有权限发送附件！请先移除附件后再发送。");
+                player.sendMessage("§c你没有权限发送物品附件！请先移除附件后再发送。");
                 data.getProcessing().set(false);
                 return;
             }
@@ -565,6 +653,23 @@ public class ComposeGUI implements InventoryHolder {
             mail.setAttachments(new ArrayList<>(attachments));
         }
 
+        // 检查金币附件权限
+        if (moneyAttachment > 0) {
+            if (!player.hasPermission("mailsystem.attach.money") && !player.hasPermission("mailsystem.admin")) {
+                player.sendMessage("§c你没有权限发送金币附件！");
+                data.getProcessing().set(false);
+                return;
+            }
+            // 检查余额
+            if (!plugin.getEconomyManager().hasEnough(player, moneyAttachment)) {
+                player.sendMessage("§c余额不足！无法发送金币附件。当前余额: §f" +
+                    plugin.getEconomyManager().format(plugin.getEconomyManager().getBalance(player)));
+                data.getProcessing().set(false);
+                return;
+            }
+            mail.setMoneyAttachment(moneyAttachment);
+        }
+
         // 计算费用（群发不扣费，因为属于管理员功能）
         double totalCost = 0;
         boolean shouldCharge = !data.isBroadcastMode();
@@ -572,7 +677,7 @@ public class ComposeGUI implements InventoryHolder {
             plugin.getEconomyManager().isEnabled()) {
             double postageFee = plugin.getMailConfig().getMailPostageFee();
             double deliveryFee = attachments.size() * plugin.getMailConfig().getAttachmentDeliveryFee();
-            totalCost = postageFee + deliveryFee;
+            totalCost = postageFee + deliveryFee + moneyAttachment; // 金币附件也计入总费用（需要扣除）
         }
 
         // 异步发送邮件（传入 player 和费用，在 MailManager 中处理扣费逻辑）
@@ -596,6 +701,9 @@ public class ComposeGUI implements InventoryHolder {
                 player.sendMessage("§a[邮件系统] §e邮件已发送给 §f" + finalReceiverName);
                 if (!attachments.isEmpty()) {
                     player.sendMessage("§a附件: §f" + attachments.size() + " 个物品");
+                }
+                if (moneyAttachment > 0) {
+                    player.sendMessage("§a金币附件: §f" + plugin.getEconomyManager().format(moneyAttachment));
                 }
 
                 // 清理数据（附件已发送，无需归还）
@@ -715,11 +823,12 @@ public class ComposeGUI implements InventoryHolder {
         String title = data.getTitle();
         String content = data.getContent() != null ? data.getContent() : "";
         List<ItemStack> attachments = data.getAttachments();
+        double moneyAttachment = data.getMoneyAttachment();
 
         // 检查附件权限
         if (checkAttach && !attachments.isEmpty()) {
             if (!sender.hasPermission("mailsystem.attach")) {
-                sender.sendMessage("§c你没有权限发送附件！");
+                sender.sendMessage("§c你没有权限发送物品附件！");
                 returnAttachmentsOnClose(sender);
                 data.getProcessing().set(false);
                 return;
@@ -727,6 +836,23 @@ public class ComposeGUI implements InventoryHolder {
             if (attachments.size() > plugin.getMailConfig().getMaxAttachments()) {
                 sender.sendMessage("§c附件数量超过限制！");
                 returnAttachmentsOnClose(sender);
+                data.getProcessing().set(false);
+                return;
+            }
+        }
+
+        // 检查金币附件权限和余额
+        if (moneyAttachment > 0) {
+            if (!sender.hasPermission("mailsystem.attach.money") && !sender.hasPermission("mailsystem.admin")) {
+                sender.sendMessage("§c你没有权限发送金币附件！");
+                data.getProcessing().set(false);
+                return;
+            }
+            double totalMoneyNeeded = moneyAttachment * targets.size();
+            if (!plugin.getEconomyManager().hasEnough(sender, totalMoneyNeeded)) {
+                sender.sendMessage("§c余额不足！群发金币附件需要 §f" +
+                    plugin.getEconomyManager().format(totalMoneyNeeded) +
+                    "§c，当前余额: §f" + plugin.getEconomyManager().format(plugin.getEconomyManager().getBalance(sender)));
                 data.getProcessing().set(false);
                 return;
             }
@@ -740,6 +866,9 @@ public class ComposeGUI implements InventoryHolder {
             if (!attachments.isEmpty()) {
                 mail.setAttachments(new ArrayList<>(attachments));
             }
+            if (moneyAttachment > 0) {
+                mail.setMoneyAttachment(moneyAttachment);
+            }
             mails.add(mail);
         }
 
@@ -747,7 +876,7 @@ public class ComposeGUI implements InventoryHolder {
         plugin.getMailManager().sendMailsBatch(mails, sender, sentUuids -> {
             int sent = sentUuids.size();
             int skipped = targets.size() - sent;
-            boolean hasAttachments = !attachments.isEmpty();
+            boolean hasAttachments = !attachments.isEmpty() || moneyAttachment > 0;
             int attachCount = attachments.size();
             boolean showSkipped = skipped > 0 && !sender.hasPermission("mailsystem.admin");
 
@@ -758,7 +887,12 @@ public class ComposeGUI implements InventoryHolder {
                     sender.sendMessage("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
                 }
                 if (hasAttachments) {
-                    sender.sendMessage("§a附件: §f" + attachCount + " 个物品/每人");
+                    if (!attachments.isEmpty()) {
+                        sender.sendMessage("§a物品附件: §f" + attachCount + " 个/每人");
+                    }
+                    if (moneyAttachment > 0) {
+                        sender.sendMessage("§a金币附件: §f" + plugin.getEconomyManager().format(moneyAttachment) + "/每人");
+                    }
                 }
                 guiManager.setPlayerComposeData(sender.getUniqueId(), null);
             });

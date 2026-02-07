@@ -553,8 +553,8 @@ public class MailManager implements Consumer<ScheduledTask> {
 
         databaseQueue.submitAsync("sendMailsBatch", conn -> {
             String sql = "INSERT INTO mails (id, sender_uuid, sender_name, receiver_uuid, receiver_name, " +
-                    "title, content, attachments, sent_time, expire_time, is_read, is_claimed, read_time, server_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    "title, content, attachments, money_attachment, sent_time, expire_time, is_read, is_claimed, read_time, server_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 int batchCount = 0;
@@ -567,12 +567,13 @@ public class MailManager implements Consumer<ScheduledTask> {
                     ps.setString(6, mail.getTitle());
                     ps.setString(7, mail.getContent());
                     ps.setBytes(8, serializeAttachments(mail.getAttachments()));
-                    ps.setLong(9, mail.getSentTime());
-                    ps.setLong(10, mail.getExpireTime());
-                    ps.setBoolean(11, mail.isRead());
-                    ps.setBoolean(12, mail.isClaimed());
-                    ps.setLong(13, mail.getReadTime());
-                    ps.setString(14, mail.getServerId());
+                    ps.setDouble(9, mail.getMoneyAttachment());
+                    ps.setLong(10, mail.getSentTime());
+                    ps.setLong(11, mail.getExpireTime());
+                    ps.setBoolean(12, mail.isRead());
+                    ps.setBoolean(13, mail.isClaimed());
+                    ps.setLong(14, mail.getReadTime());
+                    ps.setString(15, mail.getServerId());
                     ps.addBatch();
                     batchCount++;
 
@@ -622,8 +623,8 @@ public class MailManager implements Consumer<ScheduledTask> {
 
         databaseQueue.submitAsync("sendMail", conn -> {
             String sql = "INSERT INTO mails (id, sender_uuid, sender_name, receiver_uuid, receiver_name, " +
-                    "title, content, attachments, sent_time, expire_time, is_read, is_claimed, read_time, server_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    "title, content, attachments, money_attachment, sent_time, expire_time, is_read, is_claimed, read_time, server_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, mail.getId().toString());
@@ -634,12 +635,13 @@ public class MailManager implements Consumer<ScheduledTask> {
                 ps.setString(6, mail.getTitle());
                 ps.setString(7, mail.getContent());
                 ps.setBytes(8, serializeAttachments(mail.getAttachments()));
-                ps.setLong(9, mail.getSentTime());
-                ps.setLong(10, mail.getExpireTime());
-                ps.setBoolean(11, mail.isRead());
-                ps.setBoolean(12, mail.isClaimed());
-                ps.setLong(13, mail.getReadTime());
-                ps.setString(14, mail.getServerId());
+                ps.setDouble(9, mail.getMoneyAttachment());
+                ps.setLong(10, mail.getSentTime());
+                ps.setLong(11, mail.getExpireTime());
+                ps.setBoolean(12, mail.isRead());
+                ps.setBoolean(13, mail.isClaimed());
+                ps.setLong(14, mail.getReadTime());
+                ps.setString(15, mail.getServerId());
                 ps.executeUpdate();
             }
             return null;
@@ -773,7 +775,18 @@ public class MailManager implements Consumer<ScheduledTask> {
                                                 .forEach(drop -> player.getWorld().dropItem(player.getLocation(), drop));
                                     }
                                 }
-                                player.sendMessage("§a[邮件系统] §e附件已领取！");
+                                // 给玩家金币
+                                if (mail.getMoneyAttachment() > 0) {
+                                    if (plugin.getEconomyManager().isEnabled()) {
+                                        plugin.getEconomyManager().deposit(player, mail.getMoneyAttachment());
+                                        player.sendMessage("§a[邮件系统] §e附件已领取！获得金币 §f" +
+                                            plugin.getEconomyManager().format(mail.getMoneyAttachment()));
+                                    } else {
+                                        player.sendMessage("§a[邮件系统] §e物品附件已领取！§c(经济功能未启用，无法领取金币)");
+                                    }
+                                } else {
+                                    player.sendMessage("§a[邮件系统] §e附件已领取！");
+                                }
                             } finally {
                                 processingClaims.remove(mailId);
                                 playerMailCache.remove(player.getUniqueId());
@@ -939,9 +952,10 @@ public class MailManager implements Consumer<ScheduledTask> {
         boolean isClaimed = rs.getBoolean("is_claimed");
         long readTime = rs.getLong("read_time");
         String serverId = rs.getString("server_id");
+        double moneyAttachment = rs.getDouble("money_attachment");
 
         Mail mail = new Mail(id, senderUuid, senderName, receiverUuid, receiverName,
-                title, content, sentTime, expireTime, isRead, isClaimed, readTime, serverId);
+                title, content, sentTime, expireTime, isRead, isClaimed, readTime, serverId, moneyAttachment);
         mail.setAttachments(deserializeAttachments(rs.getBytes("attachments")));
         return mail;
     }

@@ -16,6 +16,7 @@ public class Mail {
     private String title;
     private String content;
     private List<ItemStack> attachments;
+    private double moneyAttachment;
     private long sentTime;
     private long expireTime;
     private boolean read;
@@ -33,6 +34,7 @@ public class Mail {
         this.title = title;
         this.content = content;
         this.attachments = new ArrayList<>();
+        this.moneyAttachment = 0;
         this.sentTime = System.currentTimeMillis();
         this.expireTime = 0;
         this.read = false;
@@ -44,6 +46,13 @@ public class Mail {
     public Mail(UUID id, UUID senderUuid, String senderName, UUID receiverUuid, String receiverName,
                 String title, String content, long sentTime, long expireTime, boolean read,
                 boolean claimed, long readTime, String serverId) {
+        this(id, senderUuid, senderName, receiverUuid, receiverName, title, content,
+             sentTime, expireTime, read, claimed, readTime, serverId, 0);
+    }
+
+    public Mail(UUID id, UUID senderUuid, String senderName, UUID receiverUuid, String receiverName,
+                String title, String content, long sentTime, long expireTime, boolean read,
+                boolean claimed, long readTime, String serverId, double moneyAttachment) {
         this.id = id;
         this.senderUuid = senderUuid;
         this.senderName = senderName;
@@ -52,6 +61,7 @@ public class Mail {
         this.title = title;
         this.content = content;
         this.attachments = new ArrayList<>();
+        this.moneyAttachment = moneyAttachment;
         this.sentTime = sentTime;
         this.expireTime = expireTime;
         this.read = read;
@@ -120,7 +130,19 @@ public class Mail {
     }
 
     public boolean hasAttachments() {
+        return (attachments != null && !attachments.isEmpty()) || moneyAttachment > 0;
+    }
+
+    public boolean hasItemAttachments() {
         return attachments != null && !attachments.isEmpty();
+    }
+
+    public double getMoneyAttachment() {
+        return moneyAttachment;
+    }
+
+    public void setMoneyAttachment(double moneyAttachment) {
+        this.moneyAttachment = moneyAttachment;
     }
 
     public long getSentTime() {
