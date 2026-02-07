@@ -233,7 +233,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家
+        // 先尝试获取在线玩家（不区分大小写）
         Player onlineTarget = Bukkit.getPlayer(targetName);
         if (onlineTarget != null) {
             sendMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, contentStr);
@@ -296,7 +296,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家
+        // 先尝试获取在线玩家（不区分大小写）
         Player onlineTarget = Bukkit.getPlayer(targetName);
         if (onlineTarget != null) {
             startWriteChatListener(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title);
@@ -669,7 +669,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家
+        // 先尝试获取在线玩家（不区分大小写）
         Player onlineTarget = Bukkit.getPlayer(targetName);
         if (onlineTarget != null) {
             sendAttachMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, item);
@@ -752,7 +752,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家
+        // 先尝试获取在线玩家（不区分大小写）
         Player onlineTarget = Bukkit.getPlayer(targetName);
         if (onlineTarget != null) {
             sendMoneyMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, amount);
@@ -1089,6 +1089,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         }
 
         String targetName = args[1];
+        // 不区分大小写查找在线玩家
         Player target = Bukkit.getPlayer(targetName);
 
         if (target != null && target.isOnline()) {

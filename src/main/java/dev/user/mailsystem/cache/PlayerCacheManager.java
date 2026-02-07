@@ -42,8 +42,9 @@ public class PlayerCacheManager {
      * 更新或插入玩家缓存（指定时间）
      */
     public void updatePlayerCache(UUID uuid, String playerName, long lastSeen) {
-        // 更新本地缓存
+        // 更新本地缓存（使用小写作为key，不区分大小写）
         nameToUuidCache.put(playerName.toLowerCase(), uuid);
+        // 存储精确名字用于显示
         uuidToNameCache.put(uuid, playerName);
         uuidToLastSeenCache.put(uuid, lastSeen);
 
@@ -65,16 +66,16 @@ public class PlayerCacheManager {
      * 根据玩家名获取UUID（先查本地缓存，再查数据库）
      */
     public void getPlayerUuid(String playerName, Consumer<UUID> callback) {
-        // 先检查本地缓存
+        // 先检查本地缓存（不区分大小写）
         UUID cached = nameToUuidCache.get(playerName.toLowerCase());
         if (cached != null) {
             callback.accept(cached);
             return;
         }
 
-        // 异步查询数据库
+        // 异步查询数据库（不区分大小写）
         databaseQueue.submit("getPlayerUuid", conn -> {
-            String sql = "SELECT uuid FROM player_cache WHERE player_name = ?";
+            String sql = "SELECT uuid, player_name FROM player_cache WHERE LOWER(player_name) = LOWER(?)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, playerName);
                 try (ResultSet rs = ps.executeQuery()) {
@@ -86,7 +87,7 @@ public class PlayerCacheManager {
             return null;
         }, result -> {
             if (result != null) {
-                // 更新本地缓存
+                // 更新本地缓存（使用小写作为key）
                 nameToUuidCache.put(playerName.toLowerCase(), result);
             }
             callback.accept(result);
@@ -173,7 +174,7 @@ public class PlayerCacheManager {
     }
 
     /**
-     * 同步获取UUID（仅从本地缓存）
+     * 同步获取UUID（仅从本地缓存，不区分大小写）
      */
     public UUID getUuidFromCache(String playerName) {
         return nameToUuidCache.get(playerName.toLowerCase());

@@ -500,7 +500,7 @@ public class ComposeGUI implements InventoryHolder {
 
                 switch (type) {
                     case "receiver" -> {
-                        // 先检查在线玩家
+                        // 先检查在线玩家（不区分大小写）
                         Player onlineTarget = Bukkit.getPlayer(message);
                         if (onlineTarget != null) {
                             data.setReceiver(onlineTarget.getName());

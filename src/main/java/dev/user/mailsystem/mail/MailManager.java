@@ -750,6 +750,22 @@ public class MailManager implements Consumer<ScheduledTask> {
         }
 
         databaseQueue.submit("claimAttachments", conn -> {
+            // 先验证玩家是否是邮件的接收者
+            String checkSql = "SELECT receiver_uuid FROM mails WHERE id = ? AND is_claimed = ?";
+            try (PreparedStatement checkPs = conn.prepareStatement(checkSql)) {
+                checkPs.setString(1, mailId.toString());
+                checkPs.setBoolean(2, false);
+                try (ResultSet rs = checkPs.executeQuery()) {
+                    if (!rs.next()) {
+                        return -1; // 邮件不存在或已被领取
+                    }
+                    UUID receiverUuid = UUID.fromString(rs.getString("receiver_uuid"));
+                    if (!receiverUuid.equals(player.getUniqueId())) {
+                        return -2; // 不是接收者，无权领取
+                    }
+                }
+            }
+
             // 第二层保护：数据库原子操作，防止跨服务器的重复领取
             // UPDATE ... WHERE is_claimed = false 确保只有真正更新了记录才返回成功
             String sql = "UPDATE mails SET is_claimed = ? WHERE id = ? AND is_claimed = ?";
@@ -801,6 +817,20 @@ public class MailManager implements Consumer<ScheduledTask> {
                         }, null);
                     }
                 });
+            } else if (updated == -1) {
+                // 邮件不存在或已被领取
+                processingClaims.remove(mailId);
+                playerMailCache.remove(player.getUniqueId());
+                player.getScheduler().run(plugin, task -> {
+                    player.sendMessage("§c[邮件系统] 该邮件不存在或附件已被领取。");
+                }, null);
+            } else if (updated == -2) {
+                // 不是接收者
+                processingClaims.remove(mailId);
+                playerMailCache.remove(player.getUniqueId());
+                player.getScheduler().run(plugin, task -> {
+                    player.sendMessage("§c[邮件系统] 你没有权限领取这封邮件的附件！");
+                }, null);
             } else {
                 // 数据库没有更新，说明已经被其他线程/服务器领取
                 player.getScheduler().run(plugin, task -> {
