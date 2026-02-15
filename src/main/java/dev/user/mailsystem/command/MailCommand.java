@@ -1,6 +1,9 @@
 package dev.user.mailsystem.command;
 
 import dev.user.mailsystem.MailSystemPlugin;
+import dev.user.mailsystem.api.draft.BatchSendResult;
+import dev.user.mailsystem.api.draft.MailDraft;
+import dev.user.mailsystem.api.draft.SendOptions;
 import dev.user.mailsystem.mail.Mail;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
@@ -19,6 +22,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 public class MailCommand implements CommandExecutor, TabCompleter {
 
@@ -26,6 +30,35 @@ public class MailCommand implements CommandExecutor, TabCompleter {
 
     public MailCommand(MailSystemPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * 查找玩家（在线或离线），找到后执行回调
+     * @param player 执行查找的玩家（用于发送消息）
+     * @param targetName 目标玩家名
+     * @param onFound 找到玩家后的回调，参数为 (uuid, name)
+     */
+    private void findPlayer(Player player, String targetName, BiConsumer<UUID, String> onFound) {
+        // 先尝试获取在线玩家（不区分大小写）
+        Player onlineTarget = Bukkit.getPlayer(targetName);
+        if (onlineTarget != null) {
+            onFound.accept(onlineTarget.getUniqueId(), onlineTarget.getName());
+            return;
+        }
+
+        // 异步查询离线玩家缓存
+        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
+        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
+            if (uuid == null) {
+                player.sendMessage("§c玩家不存在或从未加入过服务器！");
+                return;
+            }
+            // 获取玩家名（使用缓存中的名字）
+            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
+                String finalName = cachedName != null ? cachedName : targetName;
+                onFound.accept(uuid, finalName);
+            });
+        });
     }
 
     @Override
@@ -233,26 +266,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家（不区分大小写）
-        Player onlineTarget = Bukkit.getPlayer(targetName);
-        if (onlineTarget != null) {
-            sendMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, contentStr);
-            return;
-        }
-
-        // 异步查询离线玩家缓存
-        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
-        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
-            if (uuid == null) {
-                player.sendMessage("§c玩家不存在或从未加入过服务器！");
-                return;
-            }
-            // 获取玩家名（使用缓存中的名字）
-            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
-                String finalName = cachedName != null ? cachedName : targetName;
-                sendMail(player, uuid, finalName, title, contentStr);
-            });
-        });
+        findPlayer(player, targetName, (uuid, name) -> sendMail(player, uuid, name, title, contentStr));
     }
 
     private void sendMail(Player sender, UUID targetUuid, String targetName, String title, String content) {
@@ -260,12 +274,6 @@ public class MailCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendMail(Player sender, UUID targetUuid, String targetName, String title, String content, List<org.bukkit.inventory.ItemStack> attachments) {
-        Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
-                targetUuid, targetName, title, content);
-        if (attachments != null && !attachments.isEmpty()) {
-            mail.setAttachments(new ArrayList<>(attachments));
-        }
-
         // 计算费用
         double totalCost = 0;
         if (plugin.getMailConfig().isEnableEconomy() && plugin.getEconomyManager().isEnabled()) {
@@ -274,12 +282,28 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             totalCost = postageFee + deliveryFee;
         }
 
-        final double finalCost = totalCost;
-        plugin.getMailManager().sendMail(mail, sender, totalCost, success -> {
-            if (success) {
+        // 使用新API发送
+        MailDraft draft = MailDraft.builder()
+                .sender(sender.getUniqueId(), sender.getName())
+                .receiver(targetUuid, targetName)
+                .title(title)
+                .content(content)
+                .attachments(attachments != null && !attachments.isEmpty() ? new ArrayList<>(attachments) : null)
+                .build();
+
+        SendOptions options = SendOptions.builder()
+                .cost(totalCost)
+                .build();
+
+        plugin.getMailManager().send(draft, options, sender, result -> {
+            if (result.isSuccess(targetUuid)) {
                 sender.sendMessage("§a邮件已发送给 §e" + targetName);
+            } else {
+                String reason = result.getFailReason(targetUuid)
+                        .map(Enum::name)
+                        .orElse("未知错误");
+                sender.sendMessage("§c发送失败: " + reason);
             }
-            // 失败提示和扣费提示已在 sendMail 方法中处理
         });
     }
 
@@ -296,26 +320,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家（不区分大小写）
-        Player onlineTarget = Bukkit.getPlayer(targetName);
-        if (onlineTarget != null) {
-            startWriteChatListener(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title);
-            return;
-        }
-
-        // 异步查询离线玩家缓存
-        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
-        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
-            if (uuid == null) {
-                player.sendMessage("§c玩家不存在或从未加入过服务器！");
-                return;
-            }
-            // 获取玩家名
-            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
-                String finalName = cachedName != null ? cachedName : targetName;
-                startWriteChatListener(player, uuid, finalName, title);
-            });
-        });
+        findPlayer(player, targetName, (uuid, name) -> startWriteChatListener(player, uuid, name, title));
     }
 
     private void startWriteChatListener(Player player, UUID targetUuid, String targetName, String title) {
@@ -358,14 +363,27 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                             totalCost = plugin.getMailConfig().getMailPostageFee();
                         }
 
-                        final double finalCost = totalCost;
-                        Mail mail = new Mail(player.getUniqueId(), player.getName(),
-                                targetUuid, targetName, title, message);
-                        plugin.getMailManager().sendMail(mail, player, totalCost, success -> {
-                            if (success) {
+                        // 使用新API发送
+                        MailDraft draft = MailDraft.builder()
+                                .sender(player.getUniqueId(), player.getName())
+                                .receiver(targetUuid, targetName)
+                                .title(title)
+                                .content(message)
+                                .build();
+
+                        SendOptions options = SendOptions.builder()
+                                .cost(totalCost)
+                                .build();
+
+                        plugin.getMailManager().send(draft, options, player, result -> {
+                            if (result.isSuccess(targetUuid)) {
                                 player.sendMessage("§a邮件已发送给 §e" + targetName);
+                            } else {
+                                String reason = result.getFailReason(targetUuid)
+                                        .map(Enum::name)
+                                        .orElse("未知错误");
+                                player.sendMessage("§c发送失败: " + reason);
                             }
-                            // 失败提示和扣费提示已在 sendMail 方法中处理
                         });
 
                         org.bukkit.event.HandlerList.unregisterAll(listener);
@@ -669,26 +687,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家（不区分大小写）
-        Player onlineTarget = Bukkit.getPlayer(targetName);
-        if (onlineTarget != null) {
-            sendAttachMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, item);
-            return;
-        }
-
-        // 异步查询离线玩家缓存
-        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
-        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
-            if (uuid == null) {
-                player.sendMessage("§c玩家不存在或从未加入过服务器！");
-                return;
-            }
-            // 获取玩家名
-            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
-                String finalName = cachedName != null ? cachedName : targetName;
-                sendAttachMail(player, uuid, finalName, title, item);
-            });
-        });
+        findPlayer(player, targetName, (uuid, name) -> sendAttachMail(player, uuid, name, title, item));
     }
 
     private void sendAttachMail(Player sender, UUID targetUuid, String targetName, String title, ItemStack item) {
@@ -703,17 +702,29 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             totalCost = postageFee + deliveryFee;
         }
 
-        final double finalCost = totalCost;
-        Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
-                targetUuid, targetName, title, "");
-        mail.setAttachments(attachments);
+        // 使用新API发送
+        MailDraft draft = MailDraft.builder()
+                .sender(sender.getUniqueId(), sender.getName())
+                .receiver(targetUuid, targetName)
+                .title(title)
+                .content("")
+                .attachments(attachments)
+                .build();
 
-        plugin.getMailManager().sendMail(mail, sender, totalCost, success -> {
-            if (success) {
+        SendOptions options = SendOptions.builder()
+                .cost(totalCost)
+                .build();
+
+        plugin.getMailManager().send(draft, options, sender, result -> {
+            if (result.isSuccess(targetUuid)) {
                 sender.getInventory().setItemInMainHand(null);
                 sender.sendMessage("§a物品已发送给 §e" + targetName);
+            } else {
+                String reason = result.getFailReason(targetUuid)
+                        .map(Enum::name)
+                        .orElse("未知错误");
+                sender.sendMessage("§c发送失败: " + reason);
             }
-            // 失败提示和扣费提示已在 sendMail 方法中处理
         });
     }
 
@@ -752,26 +763,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // 先尝试获取在线玩家（不区分大小写）
-        Player onlineTarget = Bukkit.getPlayer(targetName);
-        if (onlineTarget != null) {
-            sendMoneyMail(player, onlineTarget.getUniqueId(), onlineTarget.getName(), title, amount);
-            return;
-        }
-
-        // 异步查询离线玩家缓存
-        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
-        plugin.getPlayerCacheManager().getPlayerUuid(targetName, uuid -> {
-            if (uuid == null) {
-                player.sendMessage("§c玩家不存在或从未加入过服务器！");
-                return;
-            }
-            // 获取玩家名
-            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
-                String finalName = cachedName != null ? cachedName : targetName;
-                sendMoneyMail(player, uuid, finalName, title, amount);
-            });
-        });
+        findPlayer(player, targetName, (uuid, name) -> sendMoneyMail(player, uuid, name, title, amount));
     }
 
     private void sendMoneyMail(Player sender, UUID targetUuid, String targetName, String title, double amount) {
@@ -781,16 +773,29 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             totalCost = plugin.getMailConfig().getMailPostageFee() + amount;
         }
 
-        Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
-                targetUuid, targetName, title, "§e这是一封包含金币的邮件，请领取附件。");
-        mail.setMoneyAttachment(amount);
+        // 使用新API发送
+        MailDraft draft = MailDraft.builder()
+                .sender(sender.getUniqueId(), sender.getName())
+                .receiver(targetUuid, targetName)
+                .title(title)
+                .content("§e这是一封包含金币的邮件，请领取附件。")
+                .moneyAttachment(amount)
+                .build();
 
-        plugin.getMailManager().sendMail(mail, sender, totalCost, success -> {
-            if (success) {
+        SendOptions options = SendOptions.builder()
+                .cost(totalCost)
+                .build();
+
+        plugin.getMailManager().send(draft, options, sender, result -> {
+            if (result.isSuccess(targetUuid)) {
                 sender.sendMessage("§a金币邮件已发送给 §e" + targetName + " §a，金额: §f" +
                     plugin.getEconomyManager().format(amount));
+            } else {
+                String reason = result.getFailReason(targetUuid)
+                        .map(Enum::name)
+                        .orElse("未知错误");
+                sender.sendMessage("§c发送失败: " + reason);
             }
-            // 失败提示和扣费提示已在 sendMail 方法中处理
         });
     }
 
@@ -1034,52 +1039,31 @@ public class MailCommand implements CommandExecutor, TabCompleter {
     }
 
     private void broadcastToTargets(Player sender, Map<UUID, String> targets, String title, String content, String targetDesc) {
-        AtomicInteger count = new AtomicInteger(0);
-        AtomicInteger skipped = new AtomicInteger(0);
-        AtomicInteger timeout = new AtomicInteger(0);
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-
+        // 构建MailDraft列表
+        List<MailDraft> drafts = new ArrayList<>();
         for (Map.Entry<UUID, String> entry : targets.entrySet()) {
-            Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
-                    entry.getKey(), entry.getValue(), title, content);
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            plugin.getMailManager().sendMail(mail, sender, success -> {
-                if (success) {
-                    count.incrementAndGet();
-                } else {
-                    skipped.incrementAndGet();
-                }
-                future.complete(null);
-            });
-            futures.add(future);
+            MailDraft draft = MailDraft.builder()
+                    .sender(sender.getUniqueId(), sender.getName())
+                    .receiver(entry.getKey(), entry.getValue())
+                    .title(title)
+                    .content(content)
+                    .build();
+            drafts.add(draft);
         }
 
-        // 等待所有发送完成，带超时
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-            .orTimeout(plugin.getMailConfig().getBroadcastTimeout(), java.util.concurrent.TimeUnit.SECONDS)
-            .whenComplete((result, throwable) -> {
-                int sent = count.get();
-                int skip = skipped.get();
-                int to = 0;
-                if (throwable != null) {
-                    // 超时发生，计算超时数量
-                    to = (int) futures.stream().filter(f -> !f.isDone()).count();
-                    timeout.set(to);
-                    // 取消未完成的 future
-                    futures.forEach(f -> f.cancel(true));
+        // 使用批量发送API
+        SendOptions options = SendOptions.systemMail();
+        plugin.getMailManager().send(drafts, options, sender, result -> {
+            int sent = result.getSuccessCount();
+            int skip = result.getFailureCount();
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                StringBuilder msg = new StringBuilder("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
+                if (skip > 0) {
+                    msg.append("，§c跳过 " + skip + " 个");
                 }
-                final int finalTimeout = to;
-                Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
-                    StringBuilder msg = new StringBuilder("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
-                    if (skip > 0) {
-                        msg.append("，§c跳过 " + skip + " 个邮箱已满的玩家");
-                    }
-                    if (finalTimeout > 0) {
-                        msg.append("，§c" + finalTimeout + " 个发送超时");
-                    }
-                    sender.sendMessage(msg.toString());
-                });
+                sender.sendMessage(msg.toString());
             });
+        });
     }
 
     private void handleManage(Player player, String[] args) {

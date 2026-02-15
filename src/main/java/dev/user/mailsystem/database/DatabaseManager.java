@@ -9,6 +9,7 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Set;
 
 public class DatabaseManager {
 
@@ -91,7 +92,11 @@ public class DatabaseManager {
             return true;
         } catch (Exception e) {
             plugin.getLogger().severe("数据库连接失败: " + e.getMessage());
-            e.printStackTrace();
+            // 只记录异常类型和消息，避免泄露敏感信息（如密码）
+            plugin.getLogger().warning("异常类型: " + e.getClass().getName());
+            if (e.getCause() != null) {
+                plugin.getLogger().warning("根因: " + e.getCause().getClass().getName() + " - " + e.getCause().getMessage());
+            }
             return false;
         } finally {
             // 恢复原始 ClassLoader
@@ -228,23 +233,59 @@ public class DatabaseManager {
         return dataSource != null && !dataSource.isClosed();
     }
 
+    // 有效的表名白名单
+    private static final Set<String> VALID_TABLES = Set.of("mails", "player_cache", "mail_send_log", "mail_blacklist");
+    // 有效的列名白名单（用于索引）
+    private static final Set<String> VALID_COLUMNS = Set.of(
+        "receiver_uuid", "sender_uuid", "expire_time", "server_id", "uuid", "send_date",
+        "owner_uuid", "blocked_uuid", "player_name"
+    );
+    // 有效的索引名白名单
+    private static final Set<String> VALID_INDEXES = Set.of(
+        "idx_receiver", "idx_sender", "idx_expire", "idx_server",
+        "idx_player_uuid", "idx_send_log_date", "idx_blacklist_owner", "idx_blacklist_blocked"
+    );
+
+    /**
+     * 验证标识符是否安全（仅包含字母数字和下划线）
+     */
+    private boolean isValidIdentifier(String identifier) {
+        if (identifier == null || identifier.isEmpty()) {
+            return false;
+        }
+        return identifier.matches("^[a-zA-Z_][a-zA-Z0-9_]*$");
+    }
+
     /**
      * 创建索引（如果不存在）
      */
     private void createIndexIfNotExists(Connection conn, String table, String indexName, String column, boolean isMySQL) throws SQLException {
+        // 白名单验证
+        if (!VALID_TABLES.contains(table)) {
+            throw new SQLException("无效的表名: " + table);
+        }
+        if (!VALID_INDEXES.contains(indexName)) {
+            throw new SQLException("无效的索引名: " + indexName);
+        }
+        if (!VALID_COLUMNS.contains(column) && !isValidIdentifier(column)) {
+            throw new SQLException("无效的列名: " + column);
+        }
+
         try (Statement stmt = conn.createStatement()) {
             if (isMySQL) {
-                // MySQL: 查询 information_schema 检查索引是否存在
-                String checkSql = String.format(
-                    "SELECT 1 FROM information_schema.STATISTICS " +
+                // MySQL: 使用 PreparedStatement 查询 information_schema
+                String checkSql = "SELECT 1 FROM information_schema.STATISTICS " +
                     "WHERE TABLE_SCHEMA = DATABASE() " +
-                    "AND TABLE_NAME = '%s' " +
-                    "AND INDEX_NAME = '%s'",
-                    table, indexName
-                );
-                try (java.sql.ResultSet rs = stmt.executeQuery(checkSql)) {
-                    if (!rs.next()) {
-                        stmt.executeUpdate(String.format("CREATE INDEX %s ON %s(%s)", indexName, table, column));
+                    "AND TABLE_NAME = ? " +
+                    "AND INDEX_NAME = ?";
+                try (java.sql.PreparedStatement ps = conn.prepareStatement(checkSql)) {
+                    ps.setString(1, table);
+                    ps.setString(2, indexName);
+                    try (java.sql.ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            // 使用白名单验证后的安全标识符拼接SQL
+                            stmt.executeUpdate(String.format("CREATE INDEX %s ON %s(%s)", indexName, table, column));
+                        }
                     }
                 }
             } else {
@@ -254,24 +295,42 @@ public class DatabaseManager {
         }
     }
 
+    // 有效的列定义白名单
+    private static final Set<String> VALID_COLUMN_DEFS = Set.of(
+        "DOUBLE DEFAULT 0"
+    );
+
     /**
      * 添加列（如果不存在）
      */
     private void addColumnIfNotExists(Connection conn, String table, String column, String columnDef, boolean isMySQL) throws SQLException {
+        // 白名单验证
+        if (!VALID_TABLES.contains(table)) {
+            throw new SQLException("无效的表名: " + table);
+        }
+        if (!isValidIdentifier(column)) {
+            throw new SQLException("无效的列名: " + column);
+        }
+        if (!VALID_COLUMN_DEFS.contains(columnDef)) {
+            throw new SQLException("无效的列定义: " + columnDef);
+        }
+
         try (Statement stmt = conn.createStatement()) {
             if (isMySQL) {
-                // MySQL: 查询 information_schema 检查列是否存在
-                String checkSql = String.format(
-                    "SELECT 1 FROM information_schema.COLUMNS " +
+                // MySQL: 使用 PreparedStatement 查询 information_schema
+                String checkSql = "SELECT 1 FROM information_schema.COLUMNS " +
                     "WHERE TABLE_SCHEMA = DATABASE() " +
-                    "AND TABLE_NAME = '%s' " +
-                    "AND COLUMN_NAME = '%s'",
-                    table, column
-                );
-                try (java.sql.ResultSet rs = stmt.executeQuery(checkSql)) {
-                    if (!rs.next()) {
-                        stmt.executeUpdate(String.format("ALTER TABLE %s ADD COLUMN %s %s", table, column, columnDef));
-                        plugin.getLogger().info("数据库表 " + table + " 已添加列: " + column);
+                    "AND TABLE_NAME = ? " +
+                    "AND COLUMN_NAME = ?";
+                try (java.sql.PreparedStatement ps = conn.prepareStatement(checkSql)) {
+                    ps.setString(1, table);
+                    ps.setString(2, column);
+                    try (java.sql.ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            // 使用白名单验证后的安全标识符拼接SQL
+                            stmt.executeUpdate(String.format("ALTER TABLE %s ADD COLUMN %s %s", table, column, columnDef));
+                            plugin.getLogger().info("数据库表 " + table + " 已添加列: " + column);
+                        }
                     }
                 }
             } else {

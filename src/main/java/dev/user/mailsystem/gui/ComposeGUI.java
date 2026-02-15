@@ -1,6 +1,9 @@
 package dev.user.mailsystem.gui;
 
 import dev.user.mailsystem.MailSystemPlugin;
+import dev.user.mailsystem.api.draft.BatchSendResult;
+import dev.user.mailsystem.api.draft.MailDraft;
+import dev.user.mailsystem.api.draft.SendOptions;
 import dev.user.mailsystem.mail.Mail;
 import dev.user.mailsystem.util.ItemBuilder;
 import net.kyori.adventure.text.Component;
@@ -632,8 +635,6 @@ public class ComposeGUI implements InventoryHolder {
         String content = data.getContent() != null ? data.getContent() : "";
         final String finalReceiverName = receiverName;
         final UUID finalReceiverUuid = receiverUuid;
-        Mail mail = new Mail(player.getUniqueId(), player.getName(),
-                finalReceiverUuid, finalReceiverName, data.getTitle(), content);
 
         // 添加附件（从ComposeData）
         List<ItemStack> attachments = data.getAttachments();
@@ -650,7 +651,6 @@ public class ComposeGUI implements InventoryHolder {
                 data.getProcessing().set(false);
                 return;
             }
-            mail.setAttachments(new ArrayList<>(attachments));
         }
 
         // 检查金币附件权限
@@ -667,7 +667,6 @@ public class ComposeGUI implements InventoryHolder {
                 data.getProcessing().set(false);
                 return;
             }
-            mail.setMoneyAttachment(moneyAttachment);
         }
 
         // 计算费用（群发不扣费，因为属于管理员功能）
@@ -680,12 +679,29 @@ public class ComposeGUI implements InventoryHolder {
             totalCost = postageFee + deliveryFee + moneyAttachment; // 金币附件也计入总费用（需要扣除）
         }
 
-        // 异步发送邮件（传入 player 和费用，在 MailManager 中处理扣费逻辑）
-        plugin.getMailManager().sendMail(mail, player, totalCost, success -> {
+        // 构建MailDraft并使用新API发送
+        MailDraft draft = MailDraft.builder()
+                .sender(player.getUniqueId(), player.getName())
+                .receiver(finalReceiverUuid, finalReceiverName)
+                .title(data.getTitle())
+                .content(content)
+                .attachments(attachments.isEmpty() ? null : new ArrayList<>(attachments))
+                .moneyAttachment(moneyAttachment)
+                .build();
+
+        SendOptions options = SendOptions.builder()
+                .cost(totalCost)
+                .build();
+
+        plugin.getMailManager().send(draft, options, player, result -> {
             // 在主线程执行后续操作
             player.getScheduler().run(plugin, task -> {
-                if (!success) {
+                if (!result.isSuccess(finalReceiverUuid)) {
                     // 发送失败（邮箱已满或余额不足），重置处理状态允许重试
+                    String reason = result.getFailReason(finalReceiverUuid)
+                            .map(Enum::name)
+                            .orElse("未知错误");
+                    player.sendMessage("§c[邮件系统] 发送失败: " + reason);
                     data.getProcessing().set(false);
                     return;
                 }
@@ -858,23 +874,24 @@ public class ComposeGUI implements InventoryHolder {
             }
         }
 
-        // 构建邮件列表
-        List<Mail> mails = new ArrayList<>();
+        // 构建MailDraft列表并使用新API批量发送
+        List<MailDraft> drafts = new ArrayList<>();
         for (Map.Entry<UUID, String> entry : targets.entrySet()) {
-            Mail mail = new Mail(sender.getUniqueId(), sender.getName(),
-                    entry.getKey(), entry.getValue(), title, content);
-            if (!attachments.isEmpty()) {
-                mail.setAttachments(new ArrayList<>(attachments));
-            }
-            if (moneyAttachment > 0) {
-                mail.setMoneyAttachment(moneyAttachment);
-            }
-            mails.add(mail);
+            MailDraft draft = MailDraft.builder()
+                    .sender(sender.getUniqueId(), sender.getName())
+                    .receiver(entry.getKey(), entry.getValue())
+                    .title(title)
+                    .content(content)
+                    .attachments(attachments.isEmpty() ? null : new ArrayList<>(attachments))
+                    .moneyAttachment(moneyAttachment)
+                    .build();
+            drafts.add(draft);
         }
 
-        // 使用批量发送（优化版本，使用数据库批量插入）
-        plugin.getMailManager().sendMailsBatch(mails, sender, sentUuids -> {
-            int sent = sentUuids.size();
+        // 使用批量发送（使用Pipeline结构）
+        SendOptions options = SendOptions.systemMail(); // 群发使用系统邮件选项（无费用限制）
+        plugin.getMailManager().send(drafts, options, sender, result -> {
+            int sent = result.getSuccessCount();
             int skipped = targets.size() - sent;
             boolean hasAttachments = !attachments.isEmpty() || moneyAttachment > 0;
             int attachCount = attachments.size();

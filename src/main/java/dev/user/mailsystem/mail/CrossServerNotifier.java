@@ -129,6 +129,20 @@ public class CrossServerNotifier implements Consumer<ScheduledTask> {
         notifiedMails.add(mailId);
     }
 
+    /**
+     * 通知其他服务器附件已被领取
+     * 当前实现：通过数据库标记（is_claimed字段）+ 缓存清理
+     * 未来可优化：使用Redis Pub/Sub实现实时通知
+     */
+    public void notifyAttachmentClaimed(UUID mailId, UUID playerUuid) {
+        // 当前简化实现：仅记录日志，依赖数据库的is_claimed字段作为唯一真相源
+        // 其他服务器在玩家打开邮件时会从数据库重新加载状态
+        plugin.getLogger().fine("附件领取通知: 邮件 " + mailId + " 被玩家 " + playerUuid + " 领取");
+
+        // 清理发送者的缓存（如果有）
+        plugin.getMailManager().clearPlayerCache(playerUuid);
+    }
+
     private String getServerId() {
         String serverId = plugin.getConfig().getString("server.id", "");
         if (serverId.isEmpty()) {

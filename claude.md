@@ -443,7 +443,46 @@ public void clearInbox(UUID playerUuid, Consumer<Integer> callback) {
 
 ---
 
-*最后更新: 2026-02-04*
+*最后更新: 2026-02-07*
+
+### 金币附件功能（2026-02-07）
+
+**权限**：
+- `mailsystem.attach.money` - 发送带金币附件的邮件（默认op）
+- `mailsystem.admin` - 管理员权限也可发送金币附件
+
+**命令**：
+- `/fmail money <玩家> <金额> [标题]` - 发送金币邮件
+
+**GUI操作**：
+1. 打开 `/fmail` 写邮件界面
+2. 点击"设置金币附件"按钮（金锭图标，槽位16）
+3. 输入金币数量
+4. 发送时扣除相应金币
+
+**费用计算**：
+- 总费用 = 基础邮费 + 金币附件金额
+- 发送时立即从发送者扣除
+- 接收者领取邮件时获得金币
+
+**数据库变更**：
+```sql
+-- 添加金币附件列（兼容旧版本）
+ALTER TABLE mails ADD COLUMN money_attachment DOUBLE DEFAULT 0;
+```
+
+**安全修复**：
+- 修复 `claimAttachments` 权限漏洞，添加接收者身份验证
+- 只有邮件接收者才能领取附件
+- 数据库UPDATE前验证 `receiver_uuid`
+
+**玩家名大小写处理**：
+- 在线玩家查找：不区分大小写（`Bukkit.getPlayer`）
+- 离线玩家缓存：使用小写key，不区分大小写
+- 数据库查询：使用 `LOWER()` 函数
+- 显示名字：使用数据库中存储的精确大小写
+
+---
 
 ### 项目改名（2026-02-04）
 
@@ -611,3 +650,111 @@ mail:
   # 群发邮件超时时间（秒）
   broadcast-timeout: 30
 ```
+
+---
+
+## 对外API (v1.0)
+
+其他插件可通过Bukkit服务管理器获取API实例：
+
+```java
+MailSystemAPI api = Bukkit.getServicesManager().load(MailSystemAPI.class);
+```
+
+### API类结构
+
+```
+dev.user.mailsystem.api/
+├── MailSystemAPI.java          # 主接口
+├── MailSystemAPIImpl.java      # 实现类
+├── MailListener.java           # 事件监听器接口
+└── draft/
+    ├── MailDraft.java          # 邮件草稿（Builder模式）
+    ├── SendOptions.java        # 发送选项
+    ├── SendResult.java         # 发送结果
+    └── BatchSendResult.java    # 批量发送结果
+```
+
+### 使用示例
+
+**发送简单邮件：**
+```java
+MailDraft draft = MailDraft.builder()
+    .sender(player)
+    .receiver(targetUuid, targetName)
+    .title("活动奖励")
+    .content("恭喜你获得奖励！")
+    .addAttachment(rewardItem)
+    .moneyAttachment(100)
+    .build();
+
+api.send(draft, player, result -> {
+    if (result.isSuccess()) {
+        SendResult.Success success = (SendResult.Success) result;
+        player.sendMessage("发送成功！花费: " + success.getCost());
+    } else {
+        SendResult.Failure failure = (SendResult.Failure) result;
+        player.sendMessage("发送失败: " + failure.getMessage());
+    }
+});
+```
+
+**发送系统邮件：**
+```java
+api.sendSystemMail(receiverUuid, "", "系统公告", "维护通知...", null, result -> {
+    // 系统邮件免检查、免扣费
+});
+```
+
+**批量发送：**
+```java
+List<MailDraft> drafts = targets.stream()
+    .map(t -> MailDraft.builder()
+        .sender(admin)
+        .receiver(t.getUuid(), t.getName())
+        .title("全服补偿")
+        .content("感谢支持！")
+        .build())
+    .toList();
+
+api.sendBatch(drafts, SendOptions.systemMail(), admin, result -> {
+    sender.sendMessage("成功: " + result.getSuccessCount()
+        + ", 失败: " + result.getFailCount());
+});
+```
+
+**监听邮件事件：**
+```java
+api.registerListener(new MailListener() {
+    @Override
+    public void onMailSend(MailSendEvent event) {
+        // 记录日志
+    }
+
+    @Override
+    public void onAttachmentClaim(AttachmentClaimEvent event) {
+        // 统计领取
+    }
+});
+```
+
+### SendOptions选项
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `bypassMailboxLimit` | 无视邮箱上限 | false |
+| `bypassBlacklist` | 无视黑名单 | false |
+| `bypassDailyLimit` | 无视每日限制 | false |
+| `chargeSender` | 是否扣费 | true |
+| `notifyReceiver` | 是否通知接收者 | true |
+| `customCost` | 自定义费用 | -1(自动) |
+
+**预定义选项：**
+- `SendOptions.defaults()` - 默认选项
+- `SendOptions.systemMail()` - 系统邮件（免所有限制）
+- `SendOptions.admin()` - 管理员发送（免限制但扣费）
+- `SendOptions.silent()` - 静默发送（不通知）
+
+---
+
+*最后更新: 2026-02-15 - 新增对外API*

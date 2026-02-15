@@ -1,5 +1,7 @@
 package dev.user.mailsystem;
 
+import dev.user.mailsystem.api.MailSystemAPI;
+import dev.user.mailsystem.api.MailSystemAPIImpl;
 import dev.user.mailsystem.cache.PlayerCacheManager;
 import dev.user.mailsystem.command.MailCommand;
 import dev.user.mailsystem.config.MailConfig;
@@ -8,6 +10,7 @@ import dev.user.mailsystem.database.DatabaseQueue;
 import dev.user.mailsystem.economy.EconomyManager;
 import dev.user.mailsystem.gui.GUIManager;
 import dev.user.mailsystem.listener.MailListener;
+import dev.user.mailsystem.mail.AttachmentManager;
 import dev.user.mailsystem.mail.CrossServerNotifier;
 import dev.user.mailsystem.mail.MailManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -23,6 +26,8 @@ public class MailSystemPlugin extends JavaPlugin {
     private CrossServerNotifier crossServerNotifier;
     private GUIManager guiManager;
     private EconomyManager economyManager;
+    private MailSystemAPI api;
+    private AttachmentManager attachmentManager;
 
     @Override
     public void onEnable() {
@@ -47,6 +52,8 @@ public class MailSystemPlugin extends JavaPlugin {
         this.playerCacheManager.loadAllCache(null);
 
         this.mailManager = new MailManager(this);
+        this.attachmentManager = new AttachmentManager(this);
+        this.api = new MailSystemAPIImpl(this);
 
         this.crossServerNotifier = new CrossServerNotifier(this);
         this.crossServerNotifier.start();
@@ -146,5 +153,13 @@ public class MailSystemPlugin extends JavaPlugin {
 
     public EconomyManager getEconomyManager() {
         return economyManager;
+    }
+
+    public MailSystemAPI getAPI() {
+        return api;
+    }
+
+    public AttachmentManager getAttachmentManager() {
+        return attachmentManager;
     }
 }

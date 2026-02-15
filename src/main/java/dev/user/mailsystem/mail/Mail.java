@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public class Mail {
 
-    private final UUID id;
+    private UUID id;
     private final UUID senderUuid;
     private String senderName;
     private final UUID receiverUuid;
@@ -72,6 +72,10 @@ public class Mail {
 
     public UUID getId() {
         return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
     }
 
     public UUID getSenderUuid() {
