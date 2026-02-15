@@ -19,7 +19,7 @@
 
 ## 安装
 
-1. 下载 `FoliaMail-1.0.1.jar`
+1. 下载 `FoliaMail-1.1.0.jar`
 2. 将 JAR 文件放入服务器的 `plugins` 文件夹
 3. 安装依赖插件：
    - [NBTAPI](https://www.spigotmc.org/resources/nbt-api.7939/)（必需）
@@ -109,6 +109,115 @@ database:
 | `mailsystem.delete` | 删除自己的邮件 | op |
 | `mailsystem.admin` | 管理员权限（重载、管理等） | op |
 
+## 开发者 API
+
+其他插件可以通过 Gradle 引入 FoliaMail API 来调用邮件发送功能。
+
+### Gradle 配置
+
+在 `build.gradle` 或 `build.gradle.kts` 中添加：
+
+```kotlin
+repositories {
+    // 使用 GitHub 仓库（通过 JitPack）
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    // 将 USERNAME/REPO 替换为实际的 GitHub 用户名和仓库名
+    compileOnly("com.github.USERNAME:REPO:VERSION")
+
+    // 示例：
+    // compileOnly("com.github.example:FoliaMail:1.1.0")
+}
+```
+
+### API 使用示例
+
+```java
+import dev.user.mailsystem.api.MailSystemAPI;
+import dev.user.mailsystem.api.draft.MailDraft;
+import dev.user.mailsystem.api.draft.SendOptions;
+
+public class MyPlugin extends JavaPlugin {
+
+    private MailSystemAPI mailAPI;
+
+    @Override
+    public void onEnable() {
+        // 获取 API 实例
+        mailAPI = Bukkit.getServicesManager().load(MailSystemAPI.class);
+        if (mailAPI == null) {
+            getLogger().warning("FoliaMail 未安装，邮件功能不可用");
+            return;
+        }
+    }
+
+    // 发送单封邮件
+    public void sendRewardMail(Player sender, UUID targetUuid, String targetName, ItemStack reward) {
+        MailDraft draft = MailDraft.builder()
+            .sender(sender.getUniqueId(), sender.getName())
+            .receiver(targetUuid, targetName)
+            .title("活动奖励")
+            .content("恭喜你获得活动奖励！")
+            .addAttachment(reward)
+            .build();
+
+        mailAPI.send(draft, sender, result -> {
+            if (result.isSuccess(targetUuid)) {
+                sender.sendMessage("§a奖励邮件已发送！");
+            } else {
+                sender.sendMessage("§c发送失败: " + result.getFailReason(targetUuid));
+            }
+        });
+    }
+
+    // 批量发送系统邮件（无费用）
+    public void broadcastSystemMail(List<UUID> receivers, String title, String content) {
+        List<MailDraft> drafts = new ArrayList<>();
+        for (UUID receiver : receivers) {
+            drafts.add(MailDraft.builder()
+                .systemSender()
+                .receiver(receiver, "")
+                .title(title)
+                .content(content)
+                .build()
+            );
+        }
+
+        SendOptions options = SendOptions.systemMail(); // 系统邮件选项
+
+        mailAPI.sendBatch(drafts, options, null, result -> {
+            getLogger().info("批量发送完成: " + result.getSuccessCount() + "/" + result.getTotalCount());
+        });
+    }
+}
+```
+
+### API 事件监听
+
+```java
+import dev.user.mailsystem.api.MailListener;
+
+public class MyMailListener implements MailListener {
+
+    @Override
+    public void onMailSend(MailSendEvent event) {
+        // 邮件发送时触发
+        getLogger().info("邮件从 " + event.getMail().getSenderName() + " 发送给 " + event.getMail().getReceiverName());
+    }
+
+    @Override
+    public void onAttachmentClaim(AttachmentClaimEvent event) {
+        // 附件被领取时触发
+        // 可用于记录日志或触发其他奖励
+    }
+}
+
+// 注册监听器
+mailAPI.registerListener(new MyMailListener());
+```
+
 ## 构建
 
 ```bash
@@ -119,7 +228,7 @@ cd mail_system
 # 构建项目
 ./gradlew build
 
-# 输出文件位于 build/libs/FoliaMail-1.0.1.jar
+# 输出文件位于 build/libs/FoliaMail-1.1.0.jar
 ```
 
 ## 技术特性
