@@ -113,6 +113,29 @@ database:
 
 其他插件可以通过 Gradle 引入 FoliaMail API 来调用邮件发送功能。
 
+### 配置 JitPack 发布
+
+如果你是本插件开发者，需要先在 GitHub 上配置 JitPack：
+
+1. **确保项目已推送到 GitHub**
+   ```bash
+   git push origin master
+   ```
+
+2. **在 JitPack.io 上查找项目**
+   - 访问 https://jitpack.io/
+   - 输入 GitHub 仓库地址（如：`YiC200333/FoliaMail`）
+   - 点击 "Look up" 搜索
+
+3. **选择版本发布**
+   - 在 JitPack 页面找到要发布的版本号（如 `1.1.0`）
+   - 点击 "Get it" 触发构建
+   - 等待构建完成（绿色 √ 表示成功）
+
+4. **查看构建日志**
+   - 如果构建失败，点击 "Log" 查看详细日志
+   - 常见原因：缺少 `jitpack.yml`、JDK 版本不匹配、构建脚本错误
+
 ### Gradle 配置
 
 在 `build.gradle` 或 `build.gradle.kts` 中添加：
@@ -125,7 +148,11 @@ repositories {
 
 dependencies {
     // 将 USERNAME/REPO 替换为实际的 GitHub 用户名和仓库名
+    // 将 VERSION 替换为实际的版本号（如：1.1.0）
     compileOnly("com.github.USERNAME:REPO:VERSION")
+
+    // 示例：
+    // compileOnly("com.github.YiC200333:FoliaMail:1.1.0")
 
     // 示例：
     // compileOnly("com.github.example:FoliaMail:1.1.0")

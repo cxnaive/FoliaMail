@@ -1,6 +1,7 @@
 plugins {
     java
     `java-library`
+    `maven-publish`
     id("com.gradleup.shadow") version "8.3.5"
 }
 
@@ -68,4 +69,52 @@ tasks.shadowJar {
 
 tasks.build {
     dependsOn(tasks.shadowJar)
+}
+
+// 创建源代码 JAR 任务（用于 JitPack）
+tasks.register<Jar>("sourcesJar") {
+    archiveClassifier.set("sources")
+    from(sourceSets["main"].allSource)
+}
+
+// 配置 Maven 发布（用于 JitPack）
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = "dev.user"
+            artifactId = "foliamail"
+            version = project.version.toString()
+
+            from(components["java"])
+
+            // 包含源代码（可选）
+            artifact(tasks["sourcesJar"])
+
+            pom {
+                name.set("FoliaMail")
+                description.set("A multi-server synchronized mail system for Minecraft Folia/Paper")
+                url.set("https://github.com/YiC200333/FoliaMail")
+
+                licenses {
+                    license {
+                        name.set("MIT License")
+                        url.set("https://opensource.org/licenses/MIT")
+                    }
+                }
+
+                developers {
+                    developer {
+                        id.set("user")
+                        name.set("User")
+                    }
+                }
+
+                scm {
+                    connection.set("scm:git:git://github.com/YiC200333/FoliaMail.git")
+                    developerConnection.set("scm:git:ssh://github.com:YiC200333/FoliaMail.git")
+                    url.set("https://github.com/YiC200333/FoliaMail")
+                }
+            }
+        }
+    }
 }
