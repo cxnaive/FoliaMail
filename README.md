@@ -124,7 +124,7 @@ database:
 
 2. **在 JitPack.io 上查找项目**
    - 访问 https://jitpack.io/
-   - 输入 GitHub 仓库地址（如：`YiC200333/FoliaMail`）
+   - 输入 GitHub 仓库地址（如：`cxnaive/FoliaMail`）
    - 点击 "Look up" 搜索
 
 3. **选择版本发布**
@@ -152,10 +152,7 @@ dependencies {
     compileOnly("com.github.USERNAME:REPO:VERSION")
 
     // 示例：
-    // compileOnly("com.github.YiC200333:FoliaMail:1.1.0")
-
-    // 示例：
-    // compileOnly("com.github.example:FoliaMail:1.1.0")
+    // compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
 }
 ```
 
