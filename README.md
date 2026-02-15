@@ -124,12 +124,7 @@ repositories {
 }
 
 dependencies {
-    // 将 USERNAME/REPO 替换为实际的 GitHub 用户名和仓库名
-    // 将 VERSION 替换为实际的版本号（如：1.1.0）
-    compileOnly("com.github.USERNAME:REPO:VERSION")
-
-    // 示例：
-    // compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
+    compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
 }
 ```
 
