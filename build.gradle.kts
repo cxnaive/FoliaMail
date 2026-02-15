@@ -104,15 +104,15 @@ publishing {
 
                 developers {
                     developer {
-                        id.set("user")
-                        name.set("User")
+                        id.set("cxnaive")
+                        name.set("cxnaive")
                     }
                 }
 
                 scm {
-                    connection.set("scm:git:git://github.com/YiC200333/FoliaMail.git")
-                    developerConnection.set("scm:git:ssh://github.com:YiC200333/FoliaMail.git")
-                    url.set("https://github.com/YiC200333/FoliaMail")
+                    connection.set("scm:git:git://github.com/cxnaive/FoliaMail.git")
+                    developerConnection.set("scm:git:ssh://github.com:cxnaive/FoliaMail.git")
+                    url.set("https://github.com/cxnaive/FoliaMail")
                 }
             }
         }
