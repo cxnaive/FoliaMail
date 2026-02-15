@@ -24,6 +24,7 @@ public class MailConfig {
     private int maxMailboxSize;
     private int dailySendLimit;
     private int broadcastTimeout;
+    private int cacheTtl;
 
     // 经济设置
     private double mailPostageFee;
@@ -63,6 +64,7 @@ public class MailConfig {
         this.maxMailboxSize = plugin.getConfig().getInt("mail.max-mailbox-size", 100);
         this.dailySendLimit = plugin.getConfig().getInt("mail.daily-send-limit", 0);
         this.broadcastTimeout = plugin.getConfig().getInt("mail.broadcast-timeout", 30);
+        this.cacheTtl = plugin.getConfig().getInt("mail.cache-ttl", 30);
 
         // 经济配置
         this.enableEconomy = plugin.getConfig().getBoolean("economy.enabled", true);
@@ -147,6 +149,10 @@ public class MailConfig {
 
     public int getBroadcastTimeout() {
         return broadcastTimeout;
+    }
+
+    public int getCacheTtl() {
+        return cacheTtl;
     }
 
     public double getMailPostageFee() {

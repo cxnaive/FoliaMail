@@ -29,53 +29,7 @@ public class PersistenceFilter implements SendFilter {
 
     @Override
     public void filterBatch(List<SendContext> contexts, SendChain chain) {
-        // size==1时走简单逻辑
-        if (contexts.size() == 1) {
-            SendContext ctx = contexts.get(0);
-            // 构建Mail对象
-            Mail mail = buildMail(ctx);
-
-            // 提交到数据库队列
-            plugin.getDatabaseQueue().submit("sendMail", conn -> {
-                insertMail(conn, mail);
-                return null;
-            }, result -> {
-                // 数据库插入成功
-                // 记录发送日志
-                if (ctx.getSender() != null) {
-                    plugin.getMailManager().logMailSend(ctx.getSenderUuid(), 1);
-                }
-
-                // 跨服通知
-                if (ctx.getOptions().isNotifyReceiver()) {
-                    notifyReceiver(ctx, mail);
-                }
-
-                // 清理缓存
-                if (ctx.getOptions().isClearCache()) {
-                    plugin.getMailManager().clearPlayerCache(ctx.getReceiverUuid());
-                }
-
-                chain.success(contexts, null);
-            }, error -> {
-                // 数据库错误
-                plugin.getLogger().severe("发送邮件失败: " + error.getMessage());
-
-                // 分析错误类型
-                SendResult.FailReason reason = analyzeError(error);
-                String msg = getErrorMessage(reason, ctx);
-
-                if (ctx.getSender() != null) {
-                    ctx.getSender().sendMessage("§c[邮件系统] " + msg);
-                }
-
-                // 注意：如果已扣费，这里应该退款，但为简化逻辑先不处理
-                chain.fail(reason, msg);
-            });
-            return;
-        }
-
-        // size>1时走批量逻辑
+        // 统一批量逻辑（size==1也是批量的一种）
         List<Mail> mails = new ArrayList<>();
         for (SendContext ctx : contexts) {
             mails.add(buildMail(ctx));
@@ -118,7 +72,7 @@ public class PersistenceFilter implements SendFilter {
             }, error -> {
                 // 数据库错误
                 failCount.incrementAndGet();
-                plugin.getLogger().severe("批量发送邮件失败 (" + ctx.getReceiverName() + "): " + error.getMessage());
+                plugin.getLogger().severe("发送邮件失败 (" + ctx.getReceiverName() + "): " + error.getMessage());
 
                 // 分析错误类型
                 SendResult.FailReason reason = analyzeError(error);

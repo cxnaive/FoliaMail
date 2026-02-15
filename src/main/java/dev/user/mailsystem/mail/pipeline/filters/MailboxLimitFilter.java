@@ -43,32 +43,7 @@ public class MailboxLimitFilter implements SendFilter {
             return;
         }
 
-        // size==1时走简单逻辑
-        if (contexts.size() == 1) {
-            SendContext ctx = contexts.get(0);
-            if (ctx.isSkipMailboxCheck()) {
-                chain.next(contexts, null);
-                return;
-            }
-
-            // 异步查询邮箱容量
-            plugin.getMailManager().getMailCountAsync(ctx.getReceiverUuid(), currentSize -> {
-                if (currentSize >= maxSize) {
-                    // 邮箱已满
-                    String msg = "收件人 " + ctx.getReceiverName() + " 的邮箱已满 (" + currentSize + "/" + maxSize + ")";
-                    if (ctx.getSender() != null) {
-                        ctx.getSender().sendMessage("§c[邮件系统] " + msg + "，无法发送邮件！");
-                    }
-                    chain.fail(SendResult.FailReason.MAILBOX_FULL, msg);
-                } else {
-                    // 未满，继续
-                    chain.next(contexts, null);
-                }
-            });
-            return;
-        }
-
-        // size>1时走批量逻辑
+        // 统一批量逻辑（size==1也是批量的一种）
         // 收集需要检查的接收者（去重）
         Map<UUID, SendContext> uniqueReceivers = new HashMap<>();
         for (SendContext ctx : contexts) {

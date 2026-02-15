@@ -54,6 +54,8 @@ mail:
   daily-send-limit: 10
   # 群发邮件超时时间（秒），超过此时间未完成的群发将被取消
   broadcast-timeout: 30
+  # 邮件缓存过期时间（秒），玩家邮件数据在内存中的缓存时间
+  cache-ttl: 30
 
 # 经济设置（需要安装 XConomy 插件）
 economy:

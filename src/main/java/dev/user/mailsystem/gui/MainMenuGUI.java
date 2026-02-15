@@ -40,14 +40,19 @@ public class MainMenuGUI implements InventoryHolder {
      */
     public void open(Player player) {
         inventory = Bukkit.createInventory(this, SIZE, Component.text(TITLE));
-        initializeItems(player);
-        player.openInventory(inventory);
+        // 先加载未读数量，再初始化并打开GUI
+        plugin.getMailManager().getUnreadCount(player.getUniqueId(), unreadCount ->
+            player.getScheduler().run(plugin, task -> {
+                initializeItems(player, unreadCount);
+                player.openInventory(inventory);
+            }, null)
+        );
     }
 
     /**
      * 初始化物品
      */
-    private void initializeItems(Player player) {
+    private void initializeItems(Player player, int unreadCount) {
         // 填充背景
         ItemStack background = ItemBuilder.createDecoration(Material.BLACK_STAINED_GLASS_PANE, " ");
         for (int i = 0; i < SIZE; i++) {
@@ -70,7 +75,6 @@ public class MainMenuGUI implements InventoryHolder {
 
         // 收件箱按钮 - 检查读取权限
         if (player.hasPermission("mailsystem.read")) {
-            int unreadCount = plugin.getMailManager().getUnreadCount(player.getUniqueId());
             String inboxName = unreadCount > 0 ? "§e§l收件箱 §c(" + unreadCount + ")" : "§e§l收件箱";
             inventory.setItem(SLOT_INBOX, new ItemBuilder(Material.CHEST)
                     .setName(inboxName)

@@ -1,19 +1,23 @@
-# MailSystem - 多服务器同步邮件系统
+# FoliaMail - 多服务器同步邮件系统
 
-支持 Folia 的多服务器同步邮件系统插件，支持邮件附件，附件物品数据同步使用 NBT API + GZIP 压缩存储。
+[![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://papermc.io/)
+[![Folia](https://img.shields.io/badge/Folia-Supported-orange)](https://papermc.io/software/folia)
+
+一个功能完善的 Minecraft 多服务器同步邮件系统插件，支持 Folia/Paper 1.21+。
 
 ## 特性
 
-- ✅ **Folia 支持** - 完全兼容 Folia 多线程服务器
-- ✅ **多服务器同步** - 支持 MySQL 和 H2 数据库，实现多服务器邮件同步
-- ✅ **邮件附件** - 支持发送物品作为附件，完整保留物品NBT数据
-- ✅ **NBT API 集成** - 使用 NBT API 序列化物品，GZIP 压缩存储减少空间占用
-- ✅ **过期清理** - 自动清理过期邮件
-- ✅ **GUI 界面** - 完整的图形界面操作
-- ✅ **邮箱上限** - 可配置玩家邮箱最大邮件数量
-- ✅ **管理员功能** - 可管理其他玩家的邮件（查看/删除/修改状态）
-- ✅ **群发功能** - 支持向在线玩家/近期登录玩家/所有玩家群发邮件
-- ✅ **多语言支持** - 支持中文界面
+- **Folia 支持** - 完全兼容 Folia 多线程服务器架构
+- **多服务器同步** - 支持 MySQL 和 H2 数据库，实现跨服务器邮件同步
+- **邮件附件** - 支持发送物品作为附件（NBT + GZIP 压缩）
+- **金币附件** - 支持在邮件中附加金币（需要 `mailsystem.attach.money` 权限）
+- **GUI 界面** - 完整的图形界面（主菜单、收件箱、发件箱、写邮件、邮件详情）
+- **经济系统** - 可选 XConomy 集成，支持邮费功能
+- **每日限制** - 玩家每日发送邮件上限（管理员豁免）
+- **黑名单** - 玩家可屏蔽特定发送者
+- **对外 API** - 完整的开发者 API，支持其他插件调用邮件功能
+- **Pipeline 架构** - 使用责任链模式处理邮件发送流程
 
 ## 命令
 
@@ -21,42 +25,44 @@
 
 | 命令 | 描述 | 权限 |
 |------|------|------|
-| `/fmail` | 打开邮件系统GUI | mailsystem.use |
-| `/fmail send <玩家> <标题> [内容]` | 发送邮件 | mailsystem.send |
-| `/fmail write <玩家> <标题>` | 交互式编写邮件 | mailsystem.send |
-| `/fmail attach <玩家> [标题]` | 发送手持物品 | mailsystem.attach |
-| `/fmail read` | 查看未读邮件 | mailsystem.read |
-| `/fmail list [页码]` | 查看收件箱 | mailsystem.read |
-| `/fmail inbox [页码]` | 查看收件箱（别名） | mailsystem.read |
-| `/fmail sent` | 查看已发送 | mailsystem.send |
-| `/fmail open <邮件ID>` | 打开邮件详情 | mailsystem.read |
-| `/fmail claim <邮件ID>` | 领取附件 | mailsystem.read |
-| `/fmail delete <邮件ID>` | 删除邮件 | mailsystem.delete |
-| `/fmail clear` | 清空收件箱（需确认） | mailsystem.delete |
+| `/fmail` | 打开邮件系统GUI | `mailsystem.use` |
+| `/fmail send <玩家> <标题> [内容]` | 发送邮件 | `mailsystem.send` |
+| `/fmail write <玩家> <标题>` | 交互式编写邮件 | `mailsystem.send` |
+| `/fmail attach <玩家> [标题]` | 发送手持物品 | `mailsystem.attach` |
+| `/fmail money <玩家> <金额> [标题]` | 发送金币 | `mailsystem.attach.money` |
+| `/fmail read` | 查看未读邮件 | `mailsystem.read` |
+| `/fmail list [页码]` | 查看收件箱 | `mailsystem.read` |
+| `/fmail sent` | 查看已发送 | `mailsystem.send` |
+| `/fmail open <邮件ID>` | 打开邮件详情 | `mailsystem.read` |
+| `/fmail claim <邮件ID>` | 领取附件 | `mailsystem.read` |
+| `/fmail delete <邮件ID>` | 删除邮件 | `mailsystem.delete` |
+| `/fmail clear` | 清空收件箱（需确认） | `mailsystem.delete` |
+
+### 黑名单命令
+
+| 命令 | 描述 | 权限 |
+|------|------|------|
+| `/fmail blacklist add <玩家>` | 添加黑名单 | `mailsystem.use` |
+| `/fmail blacklist remove <玩家>` | 移除黑名单 | `mailsystem.use` |
+| `/fmail blacklist list` | 查看黑名单 | `mailsystem.use` |
 
 ### 管理员命令
 
 | 命令 | 描述 | 权限 |
 |------|------|------|
-| `/fmail broadcast <目标> <标题> [内容]` | 群发邮件 | mailsystem.admin |
-| `/fmail manage <玩家>` | 管理指定玩家的邮件 | mailsystem.admin |
-| `/fmail reload` | 重载配置 | mailsystem.admin |
-| `/fmail clearcache` | 清除缓存 | mailsystem.admin |
-
-**群发目标类型：**
-- `online` - 所有当前子服在线玩家
-- `3days` - 3天内登录过的玩家
-- `7days` - 7天内登录过的玩家
-- `all` - 所有曾经登录过的玩家
+| `/fmail reload` | 重载配置 | `mailsystem.admin` |
 
 ## 权限
 
-- `mailsystem.use` - 使用邮件系统基本功能
-- `mailsystem.send` - 发送邮件
-- `mailsystem.read` - 阅读邮件
-- `mailsystem.delete` - 删除邮件
-- `mailsystem.attach` - 发送带附件的邮件
-- `mailsystem.admin` - 管理员权限（群发、管理其他玩家邮件、重载配置）
+| 权限 | 描述 | 默认 |
+|------|------|------|
+| `mailsystem.use` | 使用邮件系统基础功能 | true |
+| `mailsystem.read` | 查看收件箱和阅读邮件 | true |
+| `mailsystem.send` | 发送邮件 | op |
+| `mailsystem.attach` | 发送带物品附件的邮件 | op |
+| `mailsystem.attach.money` | 发送带金币附件的邮件 | op |
+| `mailsystem.delete` | 删除自己的邮件 | op |
+| `mailsystem.admin` | 管理员权限 | op |
 
 ## 配置文件
 
@@ -67,10 +73,9 @@ server:
 
 # 数据库设置
 database:
-  # 数据库类型: mysql 或 h2
-  type: h2
+  type: h2  # 或 mysql
 
-  # MySQL 设置
+  # MySQL 设置（多服务器）
   mysql:
     host: localhost
     port: 3306
@@ -79,81 +84,52 @@ database:
     password: password
     pool-size: 10
 
-  # H2 设置
+  # H2 设置（单服务器）
   h2:
     filename: mailsystem
 
+  # 超时配置（修改后需重启）
+  timeout:
+    connection-timeout: 5000   # 连接获取超时（毫秒）
+    query-timeout: 10          # 查询超时（秒）
+    lock-wait-timeout: 5       # 锁等待超时（秒）
+
 # 邮件设置
 mail:
-  # 最大附件数量
-  max-attachments: 5
-  # 邮件标题最大长度
-  max-title-length: 32
-  # 邮件内容最大长度
-  max-content-length: 500
-  # 邮件过期天数（0为永不过期）
-  expiration-days: 30
-  # 未读邮件检查间隔（秒）
-  unread-check-interval: 60
-  # 跨服务器新邮件检查间隔（秒）
-  cross-server-check-interval: 10
-  # 玩家邮箱最大邮件数量（0为无限制）
-  max-mailbox-size: 100
+  max-attachments: 5          # 最大附件数量
+  max-title-length: 32        # 标题最大长度
+  max-content-length: 500     # 内容最大长度
+  expiration-days: 30         # 邮件过期天数（0为永不过期）
+  max-mailbox-size: 20        # 邮箱最大邮件数
+  daily-send-limit: 10        # 每日发送上限（0为无限制）
+  unread-check-interval: 60   # 未读邮件检查间隔（秒）
 
 # 经济设置（需要安装 XConomy 插件）
 economy:
-  # 是否启用经济功能
   enabled: true
-  # 发送邮件基础邮费
-  mail-postage-fee: 10.0
-  # 每个附件的快递费
-  attachment-delivery-fee: 5.0
+  currency-name: "金币"        # 货币单位
+  mail-postage-fee: 10.0      # 基础邮费
+  attachment-delivery-fee: 5.0 # 物品附件快递费/个
 ```
-
-## 多服务器配置
-
-### 使用 MySQL 实现多服务器同步
-
-1. 确保所有子服务器使用同一个 MySQL 数据库
-2. 在每个服务器的配置文件中设置：
-
-```yaml
-database:
-  type: mysql
-  mysql:
-    host: 你的MySQL主机
-    port: 3306
-    database: mailsystem
-    username: 用户名
-    password: 密码
-
-server:
-  id: "server1"  # 每个服务器设置不同的ID
-```
-
-3. 重启所有服务器
-
-## 依赖
-
-- **NBTAPI** - 必须安装，用于物品数据序列化
-- **Folia** 或 **Paper** 1.21+
-- **XConomy**（可选）- 经济插件，用于邮件费用功能
-
-## 编译
-
-```bash
-./gradlew clean shadowJar
-```
-
-编译后的插件位于 `build/libs/mail_system-1.0.0.jar`
 
 ## 项目结构
 
 ```
 src/main/java/dev/user/mailsystem/
 ├── MailSystemPlugin.java          # 主类
-├── cache/
-│   └── PlayerCacheManager.java    # 玩家缓存管理
+├── api/                           # 对外 API
+│   ├── MailSystemAPI.java         # API 接口
+│   ├── MailSystemAPIImpl.java     # API 实现
+│   ├── MailListener.java          # 事件监听器接口
+│   ├── event/                     # API 事件
+│   │   ├── AttachmentClaimEvent.java
+│   │   ├── MailReadEvent.java
+│   │   └── MailSendEvent.java
+│   └── draft/                     # 邮件草稿与选项
+│       ├── MailDraft.java         # 邮件草稿（Builder模式）
+│       ├── SendOptions.java       # 发送选项
+│       ├── SendResult.java        # 发送结果（密封类）
+│       └── BatchSendResult.java   # 批量发送结果
 ├── command/
 │   └── MailCommand.java           # 命令处理
 ├── config/
@@ -162,525 +138,163 @@ src/main/java/dev/user/mailsystem/
 │   ├── DatabaseManager.java       # 数据库连接池
 │   └── DatabaseQueue.java         # 异步数据库操作队列
 ├── economy/
-│   └── EconomyManager.java        # 经济系统管理（XConomy软依赖）
-├── gui/
-│   ├── AdminMailManageGUI.java    # 管理员邮件管理GUI
-│   ├── ComposeGUI.java            # 写邮件GUI
-│   ├── GUIManager.java            # GUI管理器
-│   ├── InboxGUI.java              # 收件箱GUI
-│   ├── MainMenuGUI.java           # 主菜单GUI
-│   ├── MailViewGUI.java           # 邮件详情GUI
-│   └── SentBoxGUI.java            # 发件箱GUI
+│   └── EconomyManager.java        # 经济系统管理
+├── gui/                           # GUI 界面
+│   ├── ComposeGUI.java
+│   ├── InboxGUI.java
+│   ├── MainMenuGUI.java
+│   ├── MailViewGUI.java
+│   ├── SentBoxGUI.java
+│   └── GUIManager.java
 ├── listener/
-│   └── MailListener.java          # 事件监听
-├── mail/
-│   ├── CrossServerNotifier.java   # 跨服通知器
+│   └── PlayerListener.java        # 玩家事件监听
+├── mail/                          # 邮件核心
 │   ├── Mail.java                  # 邮件数据模型
-│   └── MailManager.java           # 邮件管理器
+│   ├── MailManager.java           # 邮件管理器（精简版）
+│   ├── BlacklistManager.java      # 黑名单管理
+│   ├── MailCacheManager.java      # 邮件缓存管理（含TTL）
+│   ├── MailLogManager.java        # 发送日志管理
+│   ├── AttachmentManager.java     # 附件序列化管理
+│   ├── CrossServerNotifier.java   # 跨服通知器
+│   └── pipeline/                  # Pipeline 发送流程
+│       ├── SendPipeline.java      # 发送管道
+│       ├── SendContext.java       # 发送上下文
+│       ├── SendChain.java         # 责任链接口
+│       ├── SendFilter.java        # 过滤器接口
+│       └── filters/               # 过滤器实现
+│           ├── ValidationFilter.java
+│           ├── MailboxLimitFilter.java
+│           ├── DailyLimitFilter.java
+│           ├── BlacklistFilter.java
+│           ├── EconomyFilter.java
+│           └── PersistenceFilter.java
 └── util/
     └── ItemBuilder.java           # 物品构建工具
 ```
 
-## 技术细节
+## 核心架构
 
-### 物品序列化
+### Pipeline 发送流程
 
-使用 NBT API 将 ItemStack 序列化为 NBT，然后 GZIP 压缩存储到数据库：
+邮件发送使用责任链模式（Pipeline）处理，所有发送（单发/批量）统一走批量模式：
 
 ```java
-// 序列化
-ReadWriteNBT nbtList = NBT.createNBTObject();
-for (ItemStack item : items) {
-    ReadWriteNBT itemNbt = NBT.itemStackToNBT(item);
-    nbtList.setString("item_" + i, itemNbt.toString());
-}
-String nbtString = nbtList.toString();
-// GZIP 压缩
-byte[] data = gzipCompress(nbtString);
+// MailManager.java - 统一发送入口
+public void send(List<MailDraft> drafts, SendOptions options, Player sender, Consumer<BatchSendResult> callback)
 ```
 
+**Pipeline 过滤器顺序：**
+
+1. **ValidationFilter** - 验证草稿数据完整性
+2. **MailboxLimitFilter** - 检查收件人邮箱容量
+3. **DailyLimitFilter** - 检查发送者每日限制
+4. **BlacklistFilter** - 检查黑名单关系
+5. **EconomyFilter** - 处理经济扣费
+6. **PersistenceFilter** - 持久化到数据库
+
+**过滤器统一批量处理逻辑**（单发 = size==1 的批量）：
+
 ```java
-// 反序列化
-String nbtString = gzipDecompress(data);
-ReadWriteNBT nbtList = NBT.parseNBT(nbtString);
-for (...) {
-    ReadWriteNBT itemNbt = NBT.parseNBT(nbtList.getString("item_" + i));
-    ItemStack item = NBT.itemStackFromNBT(itemNbt);
+public void filterBatch(List<SendContext> contexts, SendChain chain) {
+    // 统一处理所有上下文
+    for (SendContext ctx : contexts) {
+        // 执行过滤逻辑
+    }
+    chain.proceed(contexts); // 传递给下一个过滤器
 }
+```
+
+### 缓存系统
+
+**MailCacheManager** - 带 TTL 的邮件缓存：
+
+```java
+// 30分钟缓存过期
+cacheExpiry.put(playerUuid, System.currentTimeMillis() + 30 * 60 * 1000);
+
+// 线程安全的原子操作
+mailCache.compute(playerUuid, (key, oldValue) -> newMailList);
+```
+
+**缓存清理时机：**
+1. 定时任务每10分钟清理过期缓存
+2. 邮件发送成功后清理对应玩家缓存
+3. 附件领取后清理缓存
+4. 玩家退出后延迟清理（通过 PlayerListener）
+5. 插件重载时清理全部缓存
+
+### 跨服竞态条件处理
+
+**附件领取使用数据库行锁：**
+
+```java
+// 1. 内存锁防止同服并发
+if (processingClaims.putIfAbsent(mailId, Boolean.TRUE) != null) {
+    return; // 正在处理中
+}
+
+// 2. 数据库事务 + SELECT FOR UPDATE 防止跨服竞态
+databaseQueue.submit("claimAttachments", conn -> {
+    conn.setAutoCommit(false);
+    // 锁定行
+    String selectSql = "SELECT is_claimed FROM mails WHERE id = ? FOR UPDATE";
+    // 更新状态
+    String updateSql = "UPDATE mails SET is_claimed = TRUE WHERE id = ?";
+    conn.commit();
+});
 ```
 
 ### 异步数据库操作
 
-使用单线程队列执行所有数据库操作，避免阻塞主线程：
+使用单线程队列执行所有数据库操作：
 
 ```java
-// 提交异步任务
-databaseQueue.submitAsync("taskName", conn -> {
+// 带回调的异步任务
+databaseQueue.submit("taskName", conn -> {
     // 数据库操作
     return result;
-});
+}, callback, errorCallback);
 
-// 带回调的任务
-databaseQueue.submit("taskName", conn -> {
+// 异步任务（无回调）
+databaseQueue.submitAsync("taskName", conn -> {
     return result;
-}, callback);
-```
-
-### Folia 线程安全
-
-- 使用 `GlobalRegionScheduler` 执行定时任务
-- 使用 `player.getScheduler()` 在玩家区域线程操作背包
-- 使用 `ConcurrentHashMap` 和 `CopyOnWriteArrayList` 保证线程安全
-- 使用 `CompletableFuture` 处理异步发送结果
-
-### 邮箱上限检查
-
-发送邮件前异步查询目标玩家的邮件数量：
-
-```java
-getMailCountAsync(playerUuid, count -> {
-    if (count >= maxMailboxSize) {
-        // 邮箱已满，发送失败
-    } else {
-        // 执行发送
-    }
 });
 ```
 
-管理员（`mailsystem.admin` 权限）不受此限制。
-
-## 代码审查与优化记录
-
-### 已修复问题（18项）
-
-| # | 问题 | 文件 | 修复方案 |
-|---|------|------|----------|
-| 1 | SentBoxGUI性能问题 | `SentBoxGUI.java`, `MailManager.java` | 添加`loadSentMails()`使用数据库查询sender_uuid |
-| 2 | 附件领取竞态条件 | `MailManager.java` | 内存putIfAbsent + 数据库UPDATE WHERE双重保护 |
-| 3 | 聊天监听器内存泄漏 | `GUIManager.java`, `MailListener.java` | GUIManager集中管理监听器，PlayerQuitEvent清理 |
-| 4 | ResultSet资源泄漏 | `PlayerCacheManager.java`, `CrossServerNotifier.java`, `MailManager.java` | 使用try-with-resources包裹ResultSet |
-| 5 | lastCheckTime更新时机 | `CrossServerNotifier.java` | 查询前立即更新，避免漏检 |
-| 6 | Mail对象同步 | `Mail.java` | read/claimed方法添加synchronized |
-| 7 | 批量缓存清理 | `MailManager.java` | doSendMailsBatch中批量清理缓存 |
-| 8 | 批量数据库插入 | `MailManager.java` | JDBC batch insert，每100条执行一次 |
-| 9 | IN子句参数限制 | `MailManager.java` | 每批500个参数分批查询 |
-| 10 | GUIManager线程安全 | `GUIManager.java` | HashMap改为ConcurrentHashMap |
-| 11 | 群发选择监听器泄漏 | `ComposeGUI.java` | 使用GUIManager注册和注销 |
-| 12 | Command sent缓存遍历 | `MailCommand.java` | 改用`loadSentMails()`数据库查询 |
-| 13 | ComposeGUI快速点击 | `ComposeGUI.java`, `GUIManager.java` | 添加AtomicBoolean processing状态标记 |
-| 14 | notifiedMails无限增长 | `CrossServerNotifier.java` | 使用LinkedHashMap实现LRU缓存，限制10000条 |
-| 15 | PlayerChat兼容性问题 | `ComposeGUI.java`, `InboxGUI.java`, `AdminMailManageGUI.java`, `MailCommand.java` | 同时监听AsyncChatEvent和AsyncPlayerChatEvent |
-| 16 | getDisplayName弃用 | `MailCommand.java` | 改用Adventure Component API |
-| 17 | setCustomModelData弃用 | `ItemBuilder.java` | 添加@SuppressWarnings注解 |
-| 18 | PlayerCacheManager线程安全 | `PlayerCacheManager.java` | HashMap改为ConcurrentHashMap |
-| 19 | EconomyManager原子性 | `EconomyManager.java` | 直接扣除，消除查扣间隙 |
-| 20 | ItemMeta空指针 | `MailCommand.java` | 添加null检查 |
-| 21 | 群发邮件超时 | `MailCommand.java`, `MailConfig.java` | 添加orTimeout超时机制 |
-| 22 | 群发超时配置 | `config.yml` | 新增broadcast-timeout配置项 |
-
-### 关键修复代码
-
-**附件领取竞态条件修复：**
-```java
-// 第一层保护：内存原子操作
-if (processingClaims.putIfAbsent(mailId, Boolean.TRUE) != null) {
-    player.sendMessage("§c该邮件附件正在处理中...");
-    return;
-}
-
-databaseQueue.submit("claimAttachments", conn -> {
-    // 第二层保护：数据库原子操作
-    String sql = "UPDATE mails SET is_claimed = ? WHERE id = ? AND is_claimed = ?";
-    try (PreparedStatement ps = conn.prepareStatement(sql)) {
-        ps.setBoolean(1, true);
-        ps.setString(2, mailId.toString());
-        ps.setBoolean(3, false);
-        return ps.executeUpdate();  // 返回实际更新行数
-    }
-}, updated -> {
-    if (updated > 0) {
-        // 领取成功
-    } else {
-        // 已被其他线程/服务器领取
-    }
-    processingClaims.remove(mailId);
-});
-```
-
-**批量发送优化：**
-```java
-// JDBC batch insert，每100条执行一次
-for (Mail mail : mails) {
-    // ... 设置参数
-    ps.addBatch();
-    if (++batchCount % 100 == 0) {
-        ps.executeBatch();
-        batchCount = 0;
-    }
-}
-if (batchCount > 0) ps.executeBatch();
-```
-
-**IN子句分批查询：**
-```java
-// 每批500个，避免超过数据库参数限制(1000)
-int batchSize = 500;
-for (int i = 0; i < receiverList.size(); i += batchSize) {
-    List<UUID> batch = receiverList.subList(i, Math.min(i + batchSize, receiverList.size()));
-    String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
-    // ... 执行查询
-}
-```
-
-### 待处理问题（5项）
-
-1. **InboxGUI过期邮件过滤** - 建议在SQL层过滤而非内存
-2. **getUnreadCount性能** - 建议维护计数器或使用数据库COUNT
-3. **serializeAttachments失败处理** - 建议添加严格错误处理
-4. **DatabaseQueue队列无限增长** - 建议添加大小限制
-5. **NBT版本兼容** - 建议添加版本标记
-
----
-
-## 新增功能
-
-### 邮件费用系统（2026-02-02）
-
-**配置文件**:
-```yaml
-economy:
-  # 是否启用经济功能
-  enabled: true
-  # 发送邮件基础邮费
-  mail-postage-fee: 10.0
-  # 每个附件的快递费
-  attachment-delivery-fee: 5.0
-```
-
-**费用计算**:
-- 总费用 = 基础邮费 + 附件数量 × 快递费
-- 群发邮件不扣费（管理员功能）
-- 发送失败（邮箱满）自动退还费用
-
-**提示信息**:
-- 余额不足时提示：`§c[邮件系统] §e余额不足！需要 XX，当前余额 XX`
-- 扣费成功时提示：`§a[邮件系统] §e已扣费 XX`（统一在 MailManager 中发送）
-- 扣费失败时提示：`§c[邮件系统] §e扣费失败，请稍后再试！`
-- 发送失败（邮箱满）不扣费，无需退还
-
-**界面提示**:
-- ComposeGUI 发送按钮显示基础邮费和快递费标准
-- ComposeGUI 附件区域显示每个附件的快递费
-- `/fmail` 帮助命令显示当前费用配置
-
-**支持的费用场景**:
-| 发送方式 | 费用计算 |
-|---------|---------|
-| GUI发送 | 基础邮费 + 附件数 × 快递费 |
-| `/fmail send` | 基础邮费（无附件） |
-| `/fmail write` | 基础邮费（无附件） |
-| `/fmail attach` | 基础邮费 + 1个附件快递费 |
-| 群发 | 不扣费（管理员功能） |
-
-**核心代码**:
-```java
-// MailManager.java - 统一处理费用和发送
-private void processPaymentAndSend(Mail mail, Player sender, double cost,
-        Consumer<Boolean> callback, boolean clearCache) {
-    // 检查余额并扣费
-    if (cost > 0 && plugin.getEconomyManager().isEnabled()) {
-        if (!plugin.getEconomyManager().hasEnough(sender, cost)) {
-            sender.sendMessage("§c[邮件系统] §e余额不足！...");
-            callback.accept(false);
-            return;
-        }
-        if (!plugin.getEconomyManager().withdraw(sender, cost)) {
-            sender.sendMessage("§c[邮件系统] §e扣费失败...");
-            callback.accept(false);
-            return;
-        }
-        // 扣费成功提示
-        sender.getScheduler().run(plugin, task -> {
-            sender.sendMessage("§a[邮件系统] §e已扣费 §f" +
-                plugin.getEconomyManager().format(cost));
-        }, null);
-    }
-    // 执行发送
-    doSendMail(mail, sender, clearCache);
-    callback.accept(true);
-}
-```
-
-### 清空收件箱功能（2026-02-02）
-
-**命令**: `/fmail clear`
-- 需要权限: `mailsystem.delete`
-- 需要先输入 'confirm' 确认，防止误操作
-
-**GUI按钮**:
-- InboxGUI: 槽位51，使用熔岩桶图标
-- AdminMailManageGUI: 槽位51，管理其他玩家时显示
-
-**实现代码**:
-```java
-// MailManager.java - 清空收件箱
-public void clearInbox(UUID playerUuid, Consumer<Integer> callback) {
-    databaseQueue.submit("clearInbox", conn -> {
-        String sql = "DELETE FROM mails WHERE receiver_uuid = ?";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, playerUuid.toString());
-            return ps.executeUpdate();
-        }
-    }, deleted -> {
-        playerMailCache.remove(playerUuid);
-        unreadNotificationSent.remove(playerUuid);
-        if (callback != null) {
-            callback.accept(deleted);
-        }
-    });
-}
-```
-
----
-
-*最后更新: 2026-02-07*
-
-### 金币附件功能（2026-02-07）
-
-**权限**：
-- `mailsystem.attach.money` - 发送带金币附件的邮件（默认op）
-- `mailsystem.admin` - 管理员权限也可发送金币附件
-
-**命令**：
-- `/fmail money <玩家> <金额> [标题]` - 发送金币邮件
-
-**GUI操作**：
-1. 打开 `/fmail` 写邮件界面
-2. 点击"设置金币附件"按钮（金锭图标，槽位16）
-3. 输入金币数量
-4. 发送时扣除相应金币
-
-**费用计算**：
-- 总费用 = 基础邮费 + 金币附件金额
-- 发送时立即从发送者扣除
-- 接收者领取邮件时获得金币
-
-**数据库变更**：
-```sql
--- 添加金币附件列（兼容旧版本）
-ALTER TABLE mails ADD COLUMN money_attachment DOUBLE DEFAULT 0;
-```
-
-**安全修复**：
-- 修复 `claimAttachments` 权限漏洞，添加接收者身份验证
-- 只有邮件接收者才能领取附件
-- 数据库UPDATE前验证 `receiver_uuid`
-
-**玩家名大小写处理**：
-- 在线玩家查找：不区分大小写（`Bukkit.getPlayer`）
-- 离线玩家缓存：使用小写key，不区分大小写
-- 数据库查询：使用 `LOWER()` 函数
-- 显示名字：使用数据库中存储的精确大小写
-
----
-
-### 项目改名（2026-02-04）
-
-项目正式更名为 **FoliaMail**，更好地体现对 Folia 多线程服务器的支持。
-
-**变更内容：**
-- 项目名：`mail_system` → `FoliaMail`
-- JAR 文件名：`FoliaMail-1.0.1.jar`
-- 插件名：`FoliaMail`
-
----
-
-### 每日发送限制功能（2026-02-03）
-
-**配置文件**：
-```yaml
-mail:
-  # 玩家每日发送邮件上限（0为无限制，管理员权限 mailsystem.admin 不受此限制）
-  daily-send-limit: 10
-```
-
-**实现要点**：
-- 使用独立表 `mail_send_log` 记录每日发送次数，删除邮件不影响统计
-- 异步查询，不卡顿主线程
-- 管理员权限（`mailsystem.admin`）不受此限制
-
-**数据库表**：
-```sql
-CREATE TABLE mail_send_log (
-    player_uuid VARCHAR(36) NOT NULL,
-    send_date VARCHAR(10) NOT NULL,  -- yyyy-MM-dd
-    send_count INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (player_uuid, send_date)
-);
-```
-
----
-
-### 数据库超时配置与熔断机制（2026-02-03）
-
-**配置文件**（修改后需重启生效）：
-```yaml
-database:
-  timeout:
-    connection-timeout: 5000   # 获取连接超时（毫秒）
-    query-timeout: 10          # 查询执行超时（秒）
-    lock-wait-timeout: 5       # 锁等待超时（秒）
-```
-
-**实现功能**：
-1. **连接层超时** - HikariCP `connectionTimeout` 防止获取连接无限等待
-2. **查询执行超时** - `Statement.setQueryTimeout()` 控制单查询时长
-3. **锁等待超时** - MySQL/H2 URL参数设置
-4. **队列健康监控** - 队列深度超过100时输出警告（30秒节流）
-5. **熔断机制** - 队列超过200个任务时拒绝新任务，触发错误回调
-
-**熔断阈值**：
+**熔断机制：**
 - 告警阈值：100个任务
-- 超载阈值：200个任务
+- 超载阈值：200个任务（拒绝新任务）
 
----
+## 开发者 API (v1.1.0)
 
-### 黑名单功能（2026-02-03）
+### Gradle 配置
 
-**数据库表**：
-```sql
-CREATE TABLE mail_blacklist (
-    owner_uuid VARCHAR(36) NOT NULL,     -- 黑名单所有者
-    blocked_uuid VARCHAR(36) NOT NULL,   -- 被屏蔽的玩家
-    blocked_time BIGINT NOT NULL,        -- 添加时间
-    PRIMARY KEY (owner_uuid, blocked_uuid)
-);
-```
+```kotlin
+repositories {
+    maven("https://jitpack.io")
+}
 
-**命令**：
-- `/fmail blacklist add <玩家>` - 添加黑名单
-- `/fmail blacklist remove <玩家>` - 移除黑名单
-- `/fmail blacklist list` - 查看黑名单
-
-**特性**：
-- 黑名单中的玩家无法给自己发送邮件（管理员权限除外）
-- 在发送流程中异步检查，不卡顿主线程
-- 在 GUI 帮助界面添加了黑名单命令说明
-
----
-
-### 可配置货币单位（2026-02-04）
-
-**配置文件**：
-```yaml
-economy:
-  currency-name: "金币"  # 货币单位，如 100 金币
-```
-
-**EconomyManager.format() 方法**：
-```java
-public String format(double amount) {
-    String currencyName = plugin.getMailConfig().getCurrencyName();
-    return String.format("%.2f %s", amount, currencyName);
+dependencies {
+    compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
 }
 ```
 
-**默认显示**：`10.00 金币`（可自定义为钻石、点券等）
-
----
-
-### 历史修复记录
-
-**H2 MERGE INTO 语法修复**：
-- 原使用 H2 的 `MERGE INTO ... VALUES (...)` 语法在复杂表达式时报错
-- 改为可靠的 `UPDATE → INSERT` 方式：先尝试更新计数，无记录则插入新记录
-- 兼容 H2 和 MySQL，避免 UPSERT 语法差异
-
----
-
-### 本次更新记录（2026-02-02）
-
-**修复问题：**
-- #12 Command sent命令改用数据库查询
-- #13 ComposeGUI添加发送状态标记防止快速点击
-- #14 notifiedMails添加LRU缓存机制（最大10000条）
-- #15 PlayerChat兼容性：同时监听新旧聊天事件
-- #16-17 修复弃用API警告
-
-**关键变更：**
-- 聊天监听器现在同时监听 `AsyncChatEvent`（Paper新事件）和 `AsyncPlayerChatEvent`（Bukkit旧事件）
-- 旧事件处理器只取消事件，逻辑统一在新事件中处理，避免重复执行
-- 添加 `event.viewers().clear()` 和 `event.getRecipients().clear()` 双重保险防止消息泄露
-
----
-
-### 代码安全修复（2026-02-04）
-
-**修复问题：**
-
-| # | 问题 | 严重程度 | 文件 | 修复方案 |
-|---|------|---------|------|----------|
-| 18 | PlayerCacheManager线程安全 | 高 | `PlayerCacheManager.java` | 成员变量`HashMap`改为`ConcurrentHashMap`，避免异步访问数据竞争 |
-| 19 | EconomyManager扣费非原子性 | 高 | `EconomyManager.java` | 移除预检查余额，直接调用`changePlayerBalance()`，依赖API返回值判断，消除查扣间隙 |
-| 20 | ItemMeta空指针风险 | 中 | `MailCommand.java` | 添加`meta != null`检查后再调用`hasDisplayName()` |
-| 21 | 群发邮件缺少超时机制 | 中 | `MailCommand.java` | 使用`CompletableFuture.orTimeout()`，默认30秒超时，防止无限等待 |
-| 22 | 群发超时硬编码 | 低 | `MailConfig.java`, `config.yml` | 新增`broadcast-timeout`配置项 |
-
-**群发超时修复代码：**
-
-```java
-// 使用配置的超时时间，默认30秒
-CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-    .orTimeout(plugin.getMailConfig().getBroadcastTimeout(), TimeUnit.SECONDS)
-    .whenComplete((result, throwable) -> {
-        if (throwable != null) {
-            // 超时发生，计算超时数量
-            int timeoutCount = (int) futures.stream()
-                .filter(f -> !f.isDone()).count();
-            // 取消未完成的 future
-            futures.forEach(f -> f.cancel(true));
-        }
-        // 发送结果消息给管理员...
-    });
-```
-
-**配置文件更新：**
-```yaml
-mail:
-  # 群发邮件超时时间（秒）
-  broadcast-timeout: 30
-```
-
----
-
-## 对外API (v1.0)
-
-其他插件可通过Bukkit服务管理器获取API实例：
+### 获取 API 实例
 
 ```java
 MailSystemAPI api = Bukkit.getServicesManager().load(MailSystemAPI.class);
+if (api == null) {
+    getLogger().warning("FoliaMail 未安装");
+    return;
+}
 ```
 
-### API类结构
+### 发送邮件
 
-```
-dev.user.mailsystem.api/
-├── MailSystemAPI.java          # 主接口
-├── MailSystemAPIImpl.java      # 实现类
-├── MailListener.java           # 事件监听器接口
-└── draft/
-    ├── MailDraft.java          # 邮件草稿（Builder模式）
-    ├── SendOptions.java        # 发送选项
-    ├── SendResult.java         # 发送结果
-    └── BatchSendResult.java    # 批量发送结果
-```
-
-### 使用示例
-
-**发送简单邮件：**
 ```java
+// 构建邮件草稿
 MailDraft draft = MailDraft.builder()
-    .sender(player)
+    .sender(player.getUniqueId(), player.getName())
     .receiver(targetUuid, targetName)
     .title("活动奖励")
     .content("恭喜你获得奖励！")
@@ -688,73 +302,126 @@ MailDraft draft = MailDraft.builder()
     .moneyAttachment(100)
     .build();
 
+// 发送（统一使用 BatchSendResult 回调）
 api.send(draft, player, result -> {
-    if (result.isSuccess()) {
-        SendResult.Success success = (SendResult.Success) result;
-        player.sendMessage("发送成功！花费: " + success.getCost());
+    if (result.isSuccess(targetUuid)) {
+        player.sendMessage("发送成功！");
     } else {
-        SendResult.Failure failure = (SendResult.Failure) result;
-        player.sendMessage("发送失败: " + failure.getMessage());
+        player.sendMessage("发送失败: " + result.getFailReason(targetUuid));
     }
 });
 ```
 
-**发送系统邮件：**
+### 批量发送
+
 ```java
-api.sendSystemMail(receiverUuid, "", "系统公告", "维护通知...", null, result -> {
-    // 系统邮件免检查、免扣费
+List<MailDraft> drafts = new ArrayList<>();
+for (UUID receiver : receivers) {
+    drafts.add(MailDraft.builder()
+        .systemSender()
+        .receiver(receiver, "")
+        .title(title)
+        .content(content)
+        .build()
+    );
+}
+
+// 系统邮件选项（免限制、免扣费）
+SendOptions options = SendOptions.systemMail();
+
+api.sendBatch(drafts, options, admin, result -> {
+    getLogger().info("批量发送完成: " + result.getSuccessCount() + "/" + result.getTotalCount());
 });
 ```
 
-**批量发送：**
-```java
-List<MailDraft> drafts = targets.stream()
-    .map(t -> MailDraft.builder()
-        .sender(admin)
-        .receiver(t.getUuid(), t.getName())
-        .title("全服补偿")
-        .content("感谢支持！")
-        .build())
-    .toList();
+### 事件监听
 
-api.sendBatch(drafts, SendOptions.systemMail(), admin, result -> {
-    sender.sendMessage("成功: " + result.getSuccessCount()
-        + ", 失败: " + result.getFailCount());
-});
-```
-
-**监听邮件事件：**
 ```java
 api.registerListener(new MailListener() {
     @Override
     public void onMailSend(MailSendEvent event) {
-        // 记录日志
+        // 邮件发送时触发
+    }
+
+    @Override
+    public void onMailRead(MailReadEvent event) {
+        // 邮件被阅读时触发
     }
 
     @Override
     public void onAttachmentClaim(AttachmentClaimEvent event) {
-        // 统计领取
+        // 附件被领取时触发
     }
 });
 ```
 
-### SendOptions选项
+### SendOptions 预定义选项
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `bypassMailboxLimit` | 无视邮箱上限 | false |
-| `bypassBlacklist` | 无视黑名单 | false |
-| `bypassDailyLimit` | 无视每日限制 | false |
-| `chargeSender` | 是否扣费 | true |
-| `notifyReceiver` | 是否通知接收者 | true |
-| `customCost` | 自定义费用 | -1(自动) |
+| 选项 | 说明 |
+|------|------|
+| `SendOptions.defaults()` | 默认选项（正常限制和扣费） |
+| `SendOptions.systemMail()` | 系统邮件（免所有限制、免扣费） |
+| `SendOptions.noCharge()` | 不扣费但保留其他限制 |
+| `SendOptions.noNotification()` | 不通知接收者 |
 
-**预定义选项：**
-- `SendOptions.defaults()` - 默认选项
-- `SendOptions.systemMail()` - 系统邮件（免所有限制）
-- `SendOptions.admin()` - 管理员发送（免限制但扣费）
-- `SendOptions.silent()` - 静默发送（不通知）
+## 编译
+
+```bash
+./gradlew clean shadowJar
+```
+
+编译后的插件位于 `build/libs/FoliaMail-1.1.0.jar`
+
+## 依赖
+
+- **Java 21+**
+- **Folia** 或 **Paper** 1.21+
+- **NBTAPI** - 必须安装，用于物品数据序列化
+- **XConomy**（可选）- 经济插件
+
+## 版本历史
+
+### v1.1.0 (2026-02-15)
+
+**重大变更：**
+- 新增完整的对外 API，支持其他插件通过 JitPack 引入
+- 重构 MailManager，使用 Pipeline 责任链模式处理发送流程
+- 统一单发/批量发送逻辑（单发 = size==1 的批量）
+- 所有 API 回调统一使用 `Consumer<BatchSendResult>`
+
+**新增功能：**
+- 金币附件功能（需要 `mailsystem.attach.money` 权限）
+- 邮件缓存 TTL 机制（30分钟过期）
+- JitPack 配置，支持 Gradle 引入
+
+**安全修复：**
+- 修复附件领取权限漏洞（验证接收者身份）
+- 修复 SQL 注入风险（添加白名单验证）
+- 修复玩家名大小写处理问题
+- 改进附件领取竞态条件处理（数据库行锁）
+
+**代码质量：**
+- 精简 MailManager（1374行 → ~470行）
+- 提取专业管理器：BlacklistManager、MailCacheManager、MailLogManager、AttachmentManager
+- 移除重复代码，统一批处理逻辑
+- 修复 NPE 风险
+
+### v1.0.1 (2026-02-04)
+
+- 项目更名为 FoliaMail
+- 新增每日发送限制功能
+- 新增黑名单功能
+- 新增数据库超时配置与熔断机制
+- 新增可配置货币单位
+
+### v1.0.0 (2026-02-02)
+
+- 初始版本
+- 多服务器同步邮件系统
+- 邮件附件（物品）
+- GUI 界面
+- 经济系统集成
 
 ---
 
-*最后更新: 2026-02-15 - 新增对外API*
+*最后更新: 2026-02-15 - v1.1.0 API发布*

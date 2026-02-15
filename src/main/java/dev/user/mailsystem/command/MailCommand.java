@@ -805,7 +805,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        plugin.getMailManager().getPlayerMailCache().clear();
+        plugin.getMailManager().clearAllCache();
         player.sendMessage("§a邮件缓存已清除。");
     }
 

@@ -98,12 +98,12 @@ public interface MailSystemAPI {
     // ==================== 邮件查询 ====================
 
     /**
-     * 获取玩家未读邮件数量（同步，从缓存读取）
+     * 异步获取玩家未读邮件数量
      *
      * @param playerUuid 玩家UUID
-     * @return 未读邮件数量
+     * @param callback   结果回调（返回未读邮件数量）
      */
-    int getUnreadCount(UUID playerUuid);
+    void getUnreadCount(UUID playerUuid, Consumer<Integer> callback);
 
     /**
      * 异步获取玩家邮件列表

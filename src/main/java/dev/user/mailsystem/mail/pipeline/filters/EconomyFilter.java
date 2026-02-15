@@ -102,12 +102,8 @@ public class EconomyFilter implements SendFilter {
 
         // 扣费成功提示
         finalSender.getScheduler().run(plugin, task -> {
-            if (contexts.size() == 1) {
-                finalSender.sendMessage("§a[邮件系统] §e已扣费 " + plugin.getEconomyManager().format(finalTotalCost));
-            } else {
-                finalSender.sendMessage("§a[邮件系统] §e批量发送已扣费 " + plugin.getEconomyManager().format(finalTotalCost) +
-                        " (共" + contexts.size() + "封)");
-            }
+            String countStr = contexts.size() == 1 ? "" : " (共" + contexts.size() + "封)";
+            finalSender.sendMessage("§a[邮件系统] §e已扣费 " + plugin.getEconomyManager().format(finalTotalCost) + countStr);
         }, null);
 
         chain.next(contexts, null);

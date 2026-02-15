@@ -33,18 +33,20 @@ public class MailListener implements Listener, Consumer<ScheduledTask> {
 
         int delay = 20 * 3;
         Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
-            int unreadCount = plugin.getMailManager().getUnreadCount(player.getUniqueId());
-            if (unreadCount > 0) {
-                player.sendMessage("§a[邮件系统] §e欢迎回来！你有 §c" + unreadCount + " §e封未读邮件");
-                player.sendMessage("§e使用 §f/fmail §e打开邮件系统GUI");
-            }
+            plugin.getMailManager().getUnreadCount(player.getUniqueId(), unreadCount -> {
+                if (unreadCount > 0) {
+                    player.sendMessage("§a[邮件系统] §e欢迎回来！你有 §c" + unreadCount + " §e封未读邮件");
+                    player.sendMessage("§e使用 §f/fmail §e打开邮件系统GUI");
+                }
+            });
         }, delay);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        plugin.getMailManager().getPlayerMailCache().remove(player.getUniqueId());
+        // 清理邮件缓存
+        plugin.getMailManager().clearPlayerCache(player.getUniqueId());
         // 清理GUI数据和聊天监听器
         if (plugin.getGuiManager() != null) {
             // 注销聊天监听器，防止内存泄漏

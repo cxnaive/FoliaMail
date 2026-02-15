@@ -51,6 +51,7 @@ public final class SendOptions {
                 .bypassDailyLimit(true)
                 .chargeSender(false)
                 .verifyReceiver(false)
+                .clearCache(true)
                 .build();
     }
 
@@ -62,6 +63,7 @@ public final class SendOptions {
                 .bypassMailboxLimit(true)
                 .bypassBlacklist(true)
                 .bypassDailyLimit(true)
+                .clearCache(true)
                 .build();
     }
 
@@ -71,6 +73,27 @@ public final class SendOptions {
     public static SendOptions silent() {
         return new Builder()
                 .notifyReceiver(false)
+                .clearCache(true)
+                .build();
+    }
+
+    /**
+     * 不扣费但保留其他限制
+     */
+    public static SendOptions noCharge() {
+        return new Builder()
+                .chargeSender(false)
+                .clearCache(true)
+                .build();
+    }
+
+    /**
+     * 不通知接收者
+     */
+    public static SendOptions noNotification() {
+        return new Builder()
+                .notifyReceiver(false)
+                .clearCache(true)
                 .build();
     }
 

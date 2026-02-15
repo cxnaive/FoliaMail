@@ -54,8 +54,8 @@ public class MailSystemAPIImpl implements MailSystemAPI {
     }
 
     @Override
-    public int getUnreadCount(UUID playerUuid) {
-        return plugin.getMailManager().getUnreadCount(playerUuid);
+    public void getUnreadCount(UUID playerUuid, Consumer<Integer> callback) {
+        plugin.getMailManager().getUnreadCount(playerUuid, callback);
     }
 
     @Override

@@ -94,17 +94,12 @@ public class MailManager implements Consumer<ScheduledTask> {
 
         // 执行Pipeline
         sendPipeline.execute(contexts, result -> {
-            // 处理结果
+            // 处理结果 - 触发事件
             if (result.isAllSuccess() || result.isPartialSuccess()) {
                 for (SendContext ctx : contexts) {
                     if (result.isSuccess(ctx.getReceiverUuid())) {
                         Mail mail = createMailFromContext(ctx);
                         plugin.getAPI().fireMailSendEvent(mail, false);
-
-                        // 清理缓存
-                        if (ctx.getOptions().isClearCache()) {
-                            cacheManager.invalidate(ctx.getReceiverUuid());
-                        }
                     }
                 }
             }
@@ -176,9 +171,11 @@ public class MailManager implements Consumer<ScheduledTask> {
         cacheManager.loadSentMails(senderUuid, callback);
     }
 
-    public int getUnreadCount(UUID playerUuid) {
-        return (int) cacheManager.getCachedMails(playerUuid).stream()
-                .filter(mail -> !mail.isRead()).count();
+    public void getUnreadCount(UUID playerUuid, Consumer<Integer> callback) {
+        cacheManager.getOrLoadMails(playerUuid, mails -> {
+            int count = (int) mails.stream().filter(mail -> !mail.isRead()).count();
+            callback.accept(count);
+        });
     }
 
     // ==================== 邮件操作 ====================
@@ -198,6 +195,8 @@ public class MailManager implements Consumer<ScheduledTask> {
             if (reader != null) {
                 plugin.getAPI().fireMailReadEvent(mail, reader);
             }
+            // 清理缓存，确保已读状态同步
+            cacheManager.invalidate(mail.getReceiverUuid());
         });
     }
 
@@ -329,6 +328,9 @@ public class MailManager implements Consumer<ScheduledTask> {
 
                     // 跨服通知：通知其他服务器缓存失效
                     plugin.getCrossServerNotifier().notifyAttachmentClaimed(mailId, player.getUniqueId());
+
+                    // 清理本地缓存
+                    cacheManager.invalidate(mail.getReceiverUuid());
                 }, null);
             } else {
                 player.sendMessage("§c[邮件系统] 附件已被领取或无权领取！");
@@ -340,7 +342,7 @@ public class MailManager implements Consumer<ScheduledTask> {
     }
 
     public void deleteMail(UUID mailId, UUID playerUuid) {
-        databaseQueue.submitAsync("deleteMail", conn -> {
+        databaseQueue.submit("deleteMail", conn -> {
             String checkSql = "SELECT receiver_uuid FROM mails WHERE id = ?";
             try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
                 ps.setString(1, mailId.toString());
@@ -353,46 +355,77 @@ public class MailManager implements Consumer<ScheduledTask> {
                                 delPs.setString(1, mailId.toString());
                                 delPs.executeUpdate();
                             }
+                            return receiverUuid;
                         }
                     }
                 }
             }
             return null;
+        }, receiverUuid -> {
+            if (receiverUuid != null) {
+                cacheManager.invalidate(receiverUuid);
+            }
         });
     }
 
     public void deleteMailById(UUID mailId) {
-        databaseQueue.submitAsync("deleteMailById", conn -> {
+        databaseQueue.submit("deleteMailById", conn -> {
+            // 先查询接收者UUID
+            String selectSql = "SELECT receiver_uuid FROM mails WHERE id = ?";
+            UUID receiverUuid = null;
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setString(1, mailId.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        receiverUuid = UUID.fromString(rs.getString("receiver_uuid"));
+                    }
+                }
+            }
+            // 删除邮件
             String sql = "DELETE FROM mails WHERE id = ?";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, mailId.toString());
                 ps.executeUpdate();
             }
-            return null;
+            return receiverUuid;
+        }, receiverUuid -> {
+            if (receiverUuid != null) {
+                cacheManager.invalidate(receiverUuid);
+            }
         });
     }
 
     public void markAsReadStatus(UUID mailId, boolean read) {
-        databaseQueue.submitAsync("markAsReadStatus", conn -> {
-            String sql = "UPDATE mails SET is_read = ? WHERE id = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setBoolean(1, read);
-                ps.setString(2, mailId.toString());
-                ps.executeUpdate();
-            }
-            return null;
+        getMail(mailId, mail -> {
+            if (mail == null) return;
+            databaseQueue.submitAsync("markAsReadStatus", conn -> {
+                String sql = "UPDATE mails SET is_read = ? WHERE id = ?";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setBoolean(1, read);
+                    ps.setString(2, mailId.toString());
+                    ps.executeUpdate();
+                }
+                return null;
+            });
+            // 清理缓存
+            cacheManager.invalidate(mail.getReceiverUuid());
         });
     }
 
     public void markAsClaimedStatus(UUID mailId, boolean claimed) {
-        databaseQueue.submitAsync("markAsClaimedStatus", conn -> {
-            String sql = "UPDATE mails SET is_claimed = ? WHERE id = ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setBoolean(1, claimed);
-                ps.setString(2, mailId.toString());
-                ps.executeUpdate();
-            }
-            return null;
+        getMail(mailId, mail -> {
+            if (mail == null) return;
+            databaseQueue.submitAsync("markAsClaimedStatus", conn -> {
+                String sql = "UPDATE mails SET is_claimed = ? WHERE id = ?";
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setBoolean(1, claimed);
+                    ps.setString(2, mailId.toString());
+                    ps.executeUpdate();
+                }
+                return null;
+            });
+            // 清理缓存
+            cacheManager.invalidate(mail.getReceiverUuid());
         });
     }
 
@@ -453,12 +486,12 @@ public class MailManager implements Consumer<ScheduledTask> {
         return cacheManager.getCachedMails(playerUuid);
     }
 
-    public Map<UUID, List<Mail>> getPlayerMailCache() {
-        return new ConcurrentHashMap<>();
-    }
-
     public void clearPlayerCache(UUID playerUuid) {
         cacheManager.invalidate(playerUuid);
+    }
+
+    public void clearAllCache() {
+        cacheManager.clear();
     }
 
     public byte[] serializeAttachmentsInternal(List<ItemStack> items) {
@@ -497,14 +530,36 @@ public class MailManager implements Consumer<ScheduledTask> {
     }
 
     private void cleanExpiredMails() {
-        databaseQueue.submitAsync("cleanExpiredMails", conn -> {
-            String sql = "DELETE FROM mails WHERE expire_time > 0 AND expire_time < ?";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        databaseQueue.submit("cleanExpiredMails", conn -> {
+            // 1. 先查询出过期的邮件接收者
+            Set<UUID> affectedReceivers = new HashSet<>();
+            String selectSql = "SELECT DISTINCT receiver_uuid FROM mails WHERE expire_time > 0 AND expire_time < ?";
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setLong(1, System.currentTimeMillis());
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        affectedReceivers.add(UUID.fromString(rs.getString("receiver_uuid")));
+                    }
+                }
+            }
+
+            // 2. 删除过期邮件
+            String deleteSql = "DELETE FROM mails WHERE expire_time > 0 AND expire_time < ?";
+            try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
                 ps.setLong(1, System.currentTimeMillis());
                 int deleted = ps.executeUpdate();
-                if (deleted > 0) plugin.getLogger().info("已清理 " + deleted + " 封过期邮件");
+                if (deleted > 0) {
+                    plugin.getLogger().info("已清理 " + deleted + " 封过期邮件");
+                }
             }
-            return null;
+            return affectedReceivers;
+        }, affectedReceivers -> {
+            // 3. 清理受影响玩家的缓存
+            if (affectedReceivers != null && !affectedReceivers.isEmpty()) {
+                for (UUID receiverUuid : affectedReceivers) {
+                    cacheManager.invalidate(receiverUuid);
+                }
+            }
         });
     }
 

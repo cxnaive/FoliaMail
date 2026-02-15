@@ -139,7 +139,7 @@ public class CrossServerNotifier implements Consumer<ScheduledTask> {
         // 其他服务器在玩家打开邮件时会从数据库重新加载状态
         plugin.getLogger().fine("附件领取通知: 邮件 " + mailId + " 被玩家 " + playerUuid + " 领取");
 
-        // 清理发送者的缓存（如果有）
+        // 清理接收者的缓存（如果有）
         plugin.getMailManager().clearPlayerCache(playerUuid);
     }
 

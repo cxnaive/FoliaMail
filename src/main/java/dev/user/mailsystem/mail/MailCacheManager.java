@@ -22,9 +22,6 @@ public class MailCacheManager {
     private final Map<UUID, CacheEntry> playerMailCache;
     private final Set<UUID> unreadNotificationSent;
 
-    // 默认缓存过期时间：30分钟
-    private static final long DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
-
     public MailCacheManager(MailSystemPlugin plugin) {
         this.plugin = plugin;
         this.databaseQueue = plugin.getDatabaseQueue();
@@ -186,8 +183,8 @@ public class MailCacheManager {
      * 获取缓存过期时间（毫秒）
      */
     private long getCacheTtl() {
-        // 可以从配置读取，暂时使用默认值
-        return DEFAULT_CACHE_TTL_MS;
+        // 从配置读取，转换为毫秒
+        return plugin.getMailConfig().getCacheTtl() * 1000L;
     }
 
     private Mail resultSetToMail(ResultSet rs) throws SQLException {
