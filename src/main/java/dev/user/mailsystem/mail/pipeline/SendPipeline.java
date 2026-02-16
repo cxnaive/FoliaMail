@@ -120,10 +120,11 @@ public class SendPipeline {
 
         @Override
         public void fail(SendResult.FailReason reason, String message) {
-            // 全部失败
-            finalCallback.accept(BatchSendResult.builder()
-                    .totalCount(totalCount)
-                    .build());
+            // 全部失败 - 需要知道所有接收者才能标记为失败
+            // 注意：这里无法获取接收者列表，因此返回空结果
+            // 实际失败处理应在具体过滤器中完成
+            BatchSendResult.Builder builder = BatchSendResult.builder().totalCount(totalCount);
+            finalCallback.accept(builder.build());
         }
 
         @Override

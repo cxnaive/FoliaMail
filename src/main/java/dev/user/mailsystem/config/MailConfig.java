@@ -38,6 +38,11 @@ public class MailConfig {
     private int lockWaitTimeout;
     private boolean timeoutConfigLoaded = false;
 
+    // 数据库队列设置（启动时加载，reload时不重载）
+    private int queueMaxSize;
+    private int queueWarningThreshold;
+    private boolean queueConfigLoaded = false;
+
     public MailConfig(MailSystemPlugin plugin) {
         this.plugin = plugin;
         load();
@@ -80,6 +85,23 @@ public class MailConfig {
             this.timeoutConfigLoaded = true;
         } else {
             plugin.getLogger().info("[注意] 数据库超时配置已在启动时加载，重载不会生效。如需修改，请重启服务器。");
+        }
+
+        // 队列配置只在第一次加载时读取，reload时不重载
+        if (!queueConfigLoaded) {
+            this.queueMaxSize = plugin.getConfig().getInt("database.queue.max-size", 1000);
+            this.queueWarningThreshold = plugin.getConfig().getInt("database.queue.warning-threshold", 800);
+            // 确保最小值
+            if (this.queueMaxSize < 100) {
+                plugin.getLogger().warning("数据库队列最大容量不能小于100，已设置为100");
+                this.queueMaxSize = 100;
+            }
+            if (this.queueWarningThreshold >= this.queueMaxSize) {
+                this.queueWarningThreshold = (int) (this.queueMaxSize * 0.8);
+            }
+            this.queueConfigLoaded = true;
+        } else {
+            plugin.getLogger().info("[注意] 数据库队列配置已在启动时加载，重载不会生效。如需修改，请重启服务器。");
         }
     }
 
@@ -182,5 +204,14 @@ public class MailConfig {
 
     public int getLockWaitTimeout() {
         return lockWaitTimeout;
+    }
+
+    // 数据库队列配置 getter
+    public int getQueueMaxSize() {
+        return queueMaxSize;
+    }
+
+    public int getQueueWarningThreshold() {
+        return queueWarningThreshold;
     }
 }

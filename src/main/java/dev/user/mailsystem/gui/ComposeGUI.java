@@ -4,6 +4,7 @@ import dev.user.mailsystem.MailSystemPlugin;
 import dev.user.mailsystem.api.draft.BatchSendResult;
 import dev.user.mailsystem.api.draft.MailDraft;
 import dev.user.mailsystem.api.draft.SendOptions;
+import dev.user.mailsystem.api.draft.SendResult;
 import dev.user.mailsystem.mail.Mail;
 import dev.user.mailsystem.util.ItemBuilder;
 import net.kyori.adventure.text.Component;
@@ -857,21 +858,14 @@ public class ComposeGUI implements InventoryHolder {
             }
         }
 
-        // 检查金币附件权限和余额
+        // 检查金币附件权限（群发使用systemMail选项，不扣费，所以只检查权限不检查余额）
         if (moneyAttachment > 0) {
             if (!sender.hasPermission("mailsystem.attach.money") && !sender.hasPermission("mailsystem.admin")) {
                 sender.sendMessage("§c你没有权限发送金币附件！");
                 data.getProcessing().set(false);
                 return;
             }
-            double totalMoneyNeeded = moneyAttachment * targets.size();
-            if (!plugin.getEconomyManager().hasEnough(sender, totalMoneyNeeded)) {
-                sender.sendMessage("§c余额不足！群发金币附件需要 §f" +
-                    plugin.getEconomyManager().format(totalMoneyNeeded) +
-                    "§c，当前余额: §f" + plugin.getEconomyManager().format(plugin.getEconomyManager().getBalance(sender)));
-                data.getProcessing().set(false);
-                return;
-            }
+            // 注意：群发不扣除发送者的金币，金币由服务器承担
         }
 
         // 构建MailDraft列表并使用新API批量发送
@@ -892,18 +886,47 @@ public class ComposeGUI implements InventoryHolder {
         SendOptions options = SendOptions.systemMail(); // 群发使用系统邮件选项（无费用限制）
         plugin.getMailManager().send(drafts, options, sender, result -> {
             int sent = result.getSuccessCount();
-            int skipped = targets.size() - sent;
+            int failed = result.getFailureCount();
+            int total = targets.size();
             boolean hasAttachments = !attachments.isEmpty() || moneyAttachment > 0;
             int attachCount = attachments.size();
-            boolean showSkipped = skipped > 0 && !sender.hasPermission("mailsystem.admin");
 
             Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
-                if (showSkipped) {
-                    sender.sendMessage("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc + "，§c跳过 " + skipped + " 个邮箱已满的玩家");
+                // 构建详细结果消息
+                StringBuilder msg = new StringBuilder("§a[邮件系统] ");
+                if (sent == total) {
+                    // 全部成功
+                    msg.append("§e群发邮件已成功发送给 §f").append(sent).append(" §e个").append(targetDesc);
+                } else if (sent > 0) {
+                    // 部分成功
+                    msg.append("§e群发邮件已发送给 §f").append(sent).append(" §e个").append(targetDesc);
+                    msg.append("，§c失败 " + failed + " 个");
+                    // 管理员显示详细失败原因
+                    if (sender.hasPermission("mailsystem.admin") && !result.getFailReasons().isEmpty()) {
+                        Map<SendResult.FailReason, Integer> reasonCounts = new HashMap<>();
+                        for (SendResult.FailReason reason : result.getFailReasons().values()) {
+                            reasonCounts.merge(reason, 1, Integer::sum);
+                        }
+                        msg.append(" §7(");
+                        boolean first = true;
+                        for (Map.Entry<SendResult.FailReason, Integer> entry : reasonCounts.entrySet()) {
+                            if (!first) msg.append(", ");
+                            msg.append(entry.getKey().getDefaultMessage()).append(":").append(entry.getValue());
+                            first = false;
+                        }
+                        msg.append(")");
+                    }
                 } else {
-                    sender.sendMessage("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
+                    // 全部失败
+                    msg.append("§c群发邮件发送失败！");
+                    if (!result.getFailReasons().isEmpty()) {
+                        SendResult.FailReason firstReason = result.getFailReasons().values().iterator().next();
+                        msg.append(" §7(").append(firstReason.getDefaultMessage()).append(")");
+                    }
                 }
-                if (hasAttachments) {
+                sender.sendMessage(msg.toString());
+
+                if (hasAttachments && sent > 0) {
                     if (!attachments.isEmpty()) {
                         sender.sendMessage("§a物品附件: §f" + attachCount + " 个/每人");
                     }

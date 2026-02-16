@@ -4,6 +4,7 @@ import dev.user.mailsystem.MailSystemPlugin;
 import dev.user.mailsystem.api.draft.BatchSendResult;
 import dev.user.mailsystem.api.draft.MailDraft;
 import dev.user.mailsystem.api.draft.SendOptions;
+import dev.user.mailsystem.api.draft.SendResult;
 import dev.user.mailsystem.mail.Mail;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
@@ -1055,11 +1056,36 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         SendOptions options = SendOptions.systemMail();
         plugin.getMailManager().send(drafts, options, sender, result -> {
             int sent = result.getSuccessCount();
-            int skip = result.getFailureCount();
+            int failed = result.getFailureCount();
+            int total = targets.size();
             Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
-                StringBuilder msg = new StringBuilder("§a[邮件系统] §e群发邮件已发送给 §f" + sent + " §e个" + targetDesc);
-                if (skip > 0) {
-                    msg.append("，§c跳过 " + skip + " 个");
+                StringBuilder msg = new StringBuilder("§a[邮件系统] ");
+                if (sent == total) {
+                    msg.append("§e群发邮件已成功发送给 §f").append(sent).append(" §e个").append(targetDesc);
+                } else if (sent > 0) {
+                    msg.append("§e群发邮件已发送给 §f").append(sent).append(" §e个").append(targetDesc);
+                    msg.append("，§c失败 ").append(failed).append(" 个");
+                    // 显示详细失败原因
+                    if (!result.getFailReasons().isEmpty()) {
+                        Map<SendResult.FailReason, Integer> reasonCounts = new HashMap<>();
+                        for (SendResult.FailReason reason : result.getFailReasons().values()) {
+                            reasonCounts.merge(reason, 1, Integer::sum);
+                        }
+                        msg.append(" §7(");
+                        boolean first = true;
+                        for (Map.Entry<SendResult.FailReason, Integer> entry : reasonCounts.entrySet()) {
+                            if (!first) msg.append(", ");
+                            msg.append(entry.getKey().getDefaultMessage()).append(":").append(entry.getValue());
+                            first = false;
+                        }
+                        msg.append(")");
+                    }
+                } else {
+                    msg.append("§c群发邮件发送失败！");
+                    if (!result.getFailReasons().isEmpty()) {
+                        SendResult.FailReason firstReason = result.getFailReasons().values().iterator().next();
+                        msg.append(" §7(").append(firstReason.getDefaultMessage()).append(")");
+                    }
                 }
                 sender.sendMessage(msg.toString());
             });

@@ -8,11 +8,16 @@ import dev.user.mailsystem.mail.pipeline.SendContext;
 import dev.user.mailsystem.mail.pipeline.SendFilter;
 import org.bukkit.Bukkit;
 
+import dev.user.mailsystem.api.draft.BatchSendResult;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -35,20 +40,26 @@ public class PersistenceFilter implements SendFilter {
             mails.add(buildMail(ctx));
         }
 
-        // 批量提交到数据库
-        AtomicInteger successCount = new AtomicInteger(0);
-        AtomicInteger failCount = new AtomicInteger(0);
+        int total = contexts.size();
+        AtomicInteger completedCount = new AtomicInteger(0);
+
+        // 追踪每个context的成功/失败状态
+        Map<UUID, Boolean> successMap = new HashMap<>();
+        Map<UUID, SendResult.FailReason> failReasonMap = new HashMap<>();
+        Map<UUID, Double> costMap = new HashMap<>();
 
         for (int i = 0; i < contexts.size(); i++) {
             SendContext ctx = contexts.get(i);
             Mail mail = mails.get(i);
+            UUID receiverUuid = ctx.getReceiverUuid();
 
             plugin.getDatabaseQueue().submit("sendMail", conn -> {
                 insertMail(conn, mail);
                 return null;
             }, result -> {
                 // 数据库插入成功
-                successCount.incrementAndGet();
+                successMap.put(receiverUuid, true);
+                costMap.put(receiverUuid, ctx.getCalculatedCost());
 
                 // 记录发送日志
                 if (ctx.getSender() != null) {
@@ -65,31 +76,61 @@ public class PersistenceFilter implements SendFilter {
                     plugin.getMailManager().clearPlayerCache(ctx.getReceiverUuid());
                 }
 
-                // 检查是否全部完成
-                if (successCount.get() + failCount.get() >= contexts.size()) {
-                    chain.success(contexts, null);
-                }
+                checkComplete(ctx, contexts, chain, completedCount, total, successMap, failReasonMap, costMap);
             }, error -> {
                 // 数据库错误
-                failCount.incrementAndGet();
+                successMap.put(receiverUuid, false);
+                SendResult.FailReason reason = analyzeError(error);
+                failReasonMap.put(receiverUuid, reason);
+
                 plugin.getLogger().severe("发送邮件失败 (" + ctx.getReceiverName() + "): " + error.getMessage());
 
-                // 分析错误类型
-                SendResult.FailReason reason = analyzeError(error);
                 if (reason == SendResult.FailReason.MAILBOX_FULL && ctx.getSender() != null) {
                     ctx.getSender().sendMessage("§c[邮件系统] 收件人 " + ctx.getReceiverName() + " 的邮箱已满，已跳过");
                 }
 
-                // 检查是否全部完成
-                if (successCount.get() + failCount.get() >= contexts.size()) {
-                    if (failCount.get() == contexts.size()) {
-                        chain.fail(SendResult.FailReason.DATABASE_ERROR, "数据库错误");
-                    } else {
-                        // 部分成功
-                        chain.success(contexts, null);
-                    }
-                }
+                checkComplete(ctx, contexts, chain, completedCount, total, successMap, failReasonMap, costMap);
             });
+        }
+    }
+
+    /**
+     * 检查是否全部完成并返回结果
+     */
+    private void checkComplete(SendContext currentCtx, List<SendContext> allContexts, SendChain chain,
+                               AtomicInteger completedCount, int total,
+                               Map<UUID, Boolean> successMap,
+                               Map<UUID, SendResult.FailReason> failReasonMap,
+                               Map<UUID, Double> costMap) {
+        int completed = completedCount.incrementAndGet();
+
+        if (completed >= total) {
+            // 全部完成，构建真实结果
+            BatchSendResult.Builder builder = BatchSendResult.builder().totalCount(total);
+
+            for (SendContext ctx : allContexts) {
+                UUID receiverUuid = ctx.getReceiverUuid();
+                Boolean success = successMap.get(receiverUuid);
+
+                if (Boolean.TRUE.equals(success)) {
+                    builder.addSuccess(receiverUuid, costMap.getOrDefault(receiverUuid, 0.0));
+                } else {
+                    SendResult.FailReason reason = failReasonMap.getOrDefault(receiverUuid, SendResult.FailReason.DATABASE_ERROR);
+                    builder.addFailure(receiverUuid, reason);
+                }
+            }
+
+            BatchSendResult result = builder.build();
+
+            // 根据结果决定调用哪个方法
+            if (result.isAllSuccess()) {
+                chain.success(allContexts, null);
+            } else if (result.isAllFailed()) {
+                chain.fail(SendResult.FailReason.DATABASE_ERROR, "所有邮件发送失败");
+            } else {
+                // 部分成功 - 使用partialSuccess
+                chain.partialSuccess(result, null);
+            }
         }
     }
 
@@ -204,15 +245,20 @@ public class PersistenceFilter implements SendFilter {
         if (msg == null) {
             return SendResult.FailReason.DATABASE_ERROR;
         }
-        msg = msg.toLowerCase();
+        String msgLower = msg.toLowerCase();
+
+        // 检查是否是队列超载
+        if (msgLower.contains("队列超载") || msgLower.contains("queue overload") || msgLower.contains("超载")) {
+            return SendResult.FailReason.QUEUE_OVERLOAD;
+        }
 
         // 检查是否是邮箱满的错误（需要数据库添加相应约束或触发器）
-        if (msg.contains("mailbox") || msg.contains("full") || msg.contains("容量") || msg.contains("已满")) {
+        if (msgLower.contains("mailbox") || msgLower.contains("full") || msgLower.contains("容量") || msgLower.contains("已满")) {
             return SendResult.FailReason.MAILBOX_FULL;
         }
 
         // 检查是否是唯一约束冲突
-        if (msg.contains("unique") || msg.contains("duplicate") || msg.contains("primary key")) {
+        if (msgLower.contains("unique") || msgLower.contains("duplicate") || msgLower.contains("primary key")) {
             return SendResult.FailReason.DATABASE_ERROR;
         }
 

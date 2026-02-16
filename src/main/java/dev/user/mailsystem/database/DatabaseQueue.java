@@ -22,8 +22,8 @@ public class DatabaseQueue {
     // 熔断机制相关
     private final AtomicLong lastOverloadWarningTime = new AtomicLong(0);
     private static final int OVERLOAD_WARNING_INTERVAL_MS = 30000; // 30秒
-    private static final int QUEUE_OVERLOAD_THRESHOLD = 200; // 队列超载阈值
-    private static final int QUEUE_WARNING_THRESHOLD = 100;  // 队列告警阈值
+    private final int queueOverloadThreshold; // 队列超载阈值（从配置读取）
+    private final int queueWarningThreshold;  // 队列告警阈值（从配置读取）
 
     public DatabaseQueue(MailSystemPlugin plugin) {
         this.plugin = plugin;
@@ -34,6 +34,9 @@ public class DatabaseQueue {
             return t;
         });
         this.running = new AtomicBoolean(false);
+        // 从配置读取队列阈值
+        this.queueOverloadThreshold = plugin.getMailConfig().getQueueMaxSize();
+        this.queueWarningThreshold = plugin.getMailConfig().getQueueWarningThreshold();
     }
 
     public void start() {
@@ -86,7 +89,7 @@ public class DatabaseQueue {
         int queueSize = taskQueue.size();
 
         // 队列超载告警（带节流，避免日志刷屏）
-        if (queueSize >= QUEUE_WARNING_THRESHOLD) {
+        if (queueSize >= queueWarningThreshold) {
             long now = System.currentTimeMillis();
             long lastWarning = lastOverloadWarningTime.get();
 
@@ -152,8 +155,8 @@ public class DatabaseQueue {
 
         // 熔断机制：队列超载时拒绝新任务
         int queueSize = taskQueue.size();
-        if (queueSize >= QUEUE_OVERLOAD_THRESHOLD) {
-            plugin.getLogger().severe("数据库队列超载 (" + queueSize + " 个任务)，拒绝新任务: " + name);
+        if (queueSize >= queueOverloadThreshold) {
+            plugin.getLogger().severe("数据库队列超载 (" + queueSize + "/" + queueOverloadThreshold + " 个任务)，拒绝新任务: " + name);
             if (errorCallback != null) {
                 errorCallback.accept(new SQLException("数据库队列超载，请稍后重试"));
             }
