@@ -12,6 +12,7 @@
 - **邮件附件** - 支持发送物品作为附件（使用 NBT + GZIP 压缩）
 - **金币附件** - 支持在邮件中附加金币（需要 `mailsystem.attach.money` 权限）
 - **GUI 界面** - 完整的图形界面（主菜单、收件箱、发件箱、写邮件、邮件详情）
+- **邮件模板** - 管理员可保存邮件为模板，支持变量替换和快速发送
 - **经济系统** - 可选 XConomy 集成，支持邮费功能
 - **每日限制** - 玩家每日发送邮件上限（管理员豁免）
 - **黑名单** - 玩家可屏蔽特定发送者
@@ -95,7 +96,20 @@ database:
 | `/fmail blacklist add <玩家>` | 添加黑名单 | `mailsystem.use` |
 | `/fmail blacklist remove <玩家>` | 移除黑名单 | `mailsystem.use` |
 | `/fmail blacklist list` | 查看黑名单 | `mailsystem.use` |
+| `/fmail template save <名称> [显示名]` | 保存当前邮件为模板 | `mailsystem.template.create` |
+| `/fmail template delete <名称>` | 删除模板 | `mailsystem.template.delete` |
+| `/fmail template list [页码]` | 列出所有模板 | `mailsystem.template.use` |
+| `/fmail template info <名称>` | 查看模板详情 | `mailsystem.template.use` |
+| `/fmail template send <模板名> <玩家>` | 使用模板发送邮件 | `mailsystem.template.send` |
+| `/fmail template broadcast <模板名> <目标>` | 使用模板群发邮件 | `mailsystem.template.broadcast` |
 | `/fmail reload` | 重载配置 | `mailsystem.admin` |
+
+**模板变量**：模板标题和内容支持以下变量
+- `{sender}` - 发送者名称
+- `{receiver}` - 接收者名称
+- `{time}` - 当前时间 (HH:mm)
+- `{date}` - 当前日期 (yyyy-MM-dd)
+- `{server}` - 服务器名称
 
 ## 权限
 
@@ -107,6 +121,11 @@ database:
 | `mailsystem.attach` | 发送带物品附件的邮件 | op |
 | `mailsystem.attach.money` | 发送带金币附件的邮件 | op |
 | `mailsystem.delete` | 删除自己的邮件 | op |
+| `mailsystem.template.create` | 创建邮件模板 | op |
+| `mailsystem.template.delete` | 删除邮件模板 | op |
+| `mailsystem.template.use` | 查看和使用邮件模板 | op |
+| `mailsystem.template.send` | 使用模板发送给单个玩家 | op |
+| `mailsystem.template.broadcast` | 使用模板群发邮件 | op |
 | `mailsystem.admin` | 管理员权限（重载、管理等） | op |
 
 ## 开发者 API

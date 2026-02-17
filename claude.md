@@ -18,6 +18,7 @@
 - **黑名单** - 玩家可屏蔽特定发送者
 - **对外 API** - 完整的开发者 API，支持其他插件调用邮件功能
 - **Pipeline 架构** - 使用责任链模式处理邮件发送流程
+- **邮件模板** - 管理员可保存邮件为模板，支持变量替换和快速发送
 
 ## 命令
 
@@ -50,6 +51,12 @@
 
 | 命令 | 描述 | 权限 |
 |------|------|------|
+| `/fmail template save <名称> [显示名]` | 保存当前邮件为模板 | `mailsystem.template.create` |
+| `/fmail template delete <名称>` | 删除模板 | `mailsystem.template.delete` |
+| `/fmail template list [页码]` | 列出所有模板 | `mailsystem.template.use` |
+| `/fmail template info <名称>` | 查看模板详情 | `mailsystem.template.use` |
+| `/fmail template send <模板名> <玩家>` | 使用模板发送邮件 | `mailsystem.template.send` |
+| `/fmail template broadcast <模板名> <目标>` | 使用模板群发邮件 | `mailsystem.template.broadcast` |
 | `/fmail reload` | 重载配置 | `mailsystem.admin` |
 
 ## 权限
@@ -62,6 +69,11 @@
 | `mailsystem.attach` | 发送带物品附件的邮件 | op |
 | `mailsystem.attach.money` | 发送带金币附件的邮件 | op |
 | `mailsystem.delete` | 删除自己的邮件 | op |
+| `mailsystem.template.create` | 创建邮件模板 | op |
+| `mailsystem.template.delete` | 删除邮件模板 | op |
+| `mailsystem.template.use` | 查看和使用邮件模板 | op |
+| `mailsystem.template.send` | 使用模板发送给单个玩家 | op |
+| `mailsystem.template.broadcast` | 使用模板群发邮件 | op |
 | `mailsystem.admin` | 管理员权限 | op |
 
 ## 配置文件
@@ -145,6 +157,7 @@ src/main/java/dev/user/mailsystem/
 │   ├── MainMenuGUI.java
 │   ├── MailViewGUI.java
 │   ├── SentBoxGUI.java
+│   ├── TemplateListGUI.java       # 模板列表界面
 │   └── GUIManager.java
 ├── listener/
 │   └── PlayerListener.java        # 玩家事件监听
@@ -157,6 +170,9 @@ src/main/java/dev/user/mailsystem/
 │   ├── AttachmentManager.java     # 附件序列化管理
 │   ├── CrossServerNotifier.java   # 跨服通知器
 │   └── pipeline/                  # Pipeline 发送流程
+├── template/                      # 邮件模板功能
+│   ├── MailTemplate.java          # 模板数据模型
+│   └── TemplateManager.java       # 模板管理器
 │       ├── SendPipeline.java      # 发送管道
 │       ├── SendContext.java       # 发送上下文
 │       ├── SendChain.java         # 责任链接口
@@ -381,6 +397,24 @@ api.registerListener(new MailListener() {
 
 ## 版本历史
 
+### v1.2.0 (2026-02-17)
+
+**新增功能：**
+- 邮件模板系统 - 管理员可将邮件保存为模板，支持变量替换
+  - 支持变量：`{sender}`, `{receiver}`, `{time}`, `{date}`, `{server}`
+  - 模板命令：`/fmail template [save|delete|list|info|send|broadcast]`
+  - GUI支持：写邮件界面可一键保存/加载模板
+- 模板权限系统：`mailsystem.template.[create|delete|use|send|broadcast]`
+
+**Bug修复：**
+- 修复保存模板时附件数据丢失问题（添加 `setReturned` 标记保护）
+- 修复模板命令 Tab 补全的权限检查和参数位置问题
+- 统一 ComposeGUI 中所有 chat listener 的注册方式
+
+**代码重构：**
+- 重构 chat listener 为函数式接口，支持通用注册方法
+- 优化异步操作的监听器注销逻辑
+
 ### v1.1.0 (2026-02-15)
 
 **重大变更：**
@@ -424,4 +458,4 @@ api.registerListener(new MailListener() {
 
 ---
 
-*最后更新: 2026-02-15 - v1.1.0 API发布*
+*最后更新: 2026-02-17 - v1.2.0 邮件模板功能发布*
