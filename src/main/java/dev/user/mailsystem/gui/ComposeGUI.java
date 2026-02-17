@@ -1108,7 +1108,7 @@ public class ComposeGUI implements InventoryHolder {
                                     // 保存失败，恢复附件归还标志，允许重新打开界面
                                     data.setReturned(false);
                                 }
-                                player.getScheduler().runDelayed(plugin, t -> guiManager.openCompose(player), null, 10);
+                                reopenComposeDelayed(player);
                             });
                         }
                 );

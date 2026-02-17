@@ -51,7 +51,6 @@
 
 | 命令 | 描述 | 权限 |
 |------|------|------|
-| `/fmail template save <名称> [显示名]` | 保存当前邮件为模板 | `mailsystem.template.create` |
 | `/fmail template delete <名称>` | 删除模板 | `mailsystem.template.delete` |
 | `/fmail template list [页码]` | 列出所有模板 | `mailsystem.template.use` |
 | `/fmail template info <名称>` | 查看模板详情 | `mailsystem.template.use` |

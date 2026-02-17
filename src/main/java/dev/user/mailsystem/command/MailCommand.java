@@ -234,9 +234,6 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                 if (player.hasPermission("mailsystem.template.broadcast")) {
                     templateCommands.add("broadcast");
                 }
-                if (player.hasPermission("mailsystem.template.create")) {
-                    templateCommands.add("save");
-                }
                 if (player.hasPermission("mailsystem.template.delete")) {
                     templateCommands.add("delete");
                 }
@@ -1200,10 +1197,6 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         String sub = args[1].toLowerCase();
 
         switch (sub) {
-            case "save" -> {
-                if (!checkPermission(player, "mailsystem.template.create")) return;
-                handleTemplateSave(player, args);
-            }
             case "delete" -> {
                 if (!checkPermission(player, "mailsystem.template.delete")) return;
                 handleTemplateDelete(player, args);
@@ -1234,57 +1227,10 @@ public class MailCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e/fmail template info <名称> §7- 查看模板详情");
         player.sendMessage("§e/fmail template send <模板名> <玩家名> §7- 使用模板发送");
         player.sendMessage("§e/fmail template broadcast <模板名> <all|online|recent3d|recent7d> §7- 群发模板");
-        if (player.hasPermission("mailsystem.template.create")) {
-            player.sendMessage("§e/fmail template save <名称> [显示名称] §7- 保存当前邮件为模板");
-        }
         if (player.hasPermission("mailsystem.template.delete")) {
             player.sendMessage("§e/fmail template delete <名称> §7- 删除模板");
         }
         player.sendMessage("§6==================================");
-    }
-
-    private void handleTemplateSave(Player player, String[] args) {
-        if (args.length < 3) {
-            player.sendMessage("§c用法: /fmail template save <名称> [显示名称]");
-            return;
-        }
-
-        String name = args[2];
-        String displayName = args.length > 3 ? args[3] : name;
-
-        // 验证名称格式（只允许字母数字下划线）
-        if (!name.matches("^[a-zA-Z0-9_]+$")) {
-            player.sendMessage("§c模板名称只能包含字母、数字和下划线！");
-            return;
-        }
-
-        // 获取当前写邮件界面的数据
-        var composeData = plugin.getGuiManager().getPlayerComposeData(player.getUniqueId());
-        if (composeData == null) {
-            player.sendMessage("§c请先打开写邮件界面并填写内容！");
-            return;
-        }
-
-        String title = composeData.getTitle();
-        String content = composeData.getContent() != null ? composeData.getContent() : "";
-        var attachments = composeData.getAttachments();
-        double money = composeData.getMoneyAttachment();
-
-        if (title.isEmpty()) {
-            player.sendMessage("§c邮件标题不能为空！");
-            return;
-        }
-
-        plugin.getTemplateManager().saveTemplate(name, displayName, title, content,
-                attachments, money, player, success -> {
-            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
-                if (success) {
-                    player.sendMessage("§a[邮件系统] 模板 §e" + name + " §a已保存！");
-                } else {
-                    player.sendMessage("§c[邮件系统] 保存模板失败！");
-                }
-            });
-        });
     }
 
     private void handleTemplateDelete(Player player, String[] args) {
