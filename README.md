@@ -143,7 +143,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
+    compileOnly("com.github.cxnaive:FoliaMail:1.2.0")
 }
 ```
 

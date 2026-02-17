@@ -281,7 +281,7 @@ databaseQueue.submitAsync("taskName", conn -> {
 - 告警阈值：100个任务
 - 超载阈值：200个任务（拒绝新任务）
 
-## 开发者 API (v1.1.0)
+## 开发者 API (v1.2.0)
 
 ### Gradle 配置
 
@@ -291,7 +291,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.github.cxnaive:FoliaMail:1.1.0")
+    compileOnly("com.github.cxnaive:FoliaMail:1.2.0")
 }
 ```
 
@@ -386,7 +386,7 @@ api.registerListener(new MailListener() {
 ./gradlew clean shadowJar
 ```
 
-编译后的插件位于 `build/libs/FoliaMail-1.1.0.jar`
+编译后的插件位于 `build/libs/FoliaMail-1.2.0.jar`
 
 ## 依赖
 
