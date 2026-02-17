@@ -3,6 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-21-blue)](https://adoptium.net/)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.21-green)](https://papermc.io/)
 [![Folia](https://img.shields.io/badge/Folia-Supported-orange)](https://papermc.io/software/folia)
+[![](https://jitpack.io/v/cxnaive/FoliaMail.svg)](https://jitpack.io/#cxnaive/FoliaMail)
 
 一个功能完善的 Minecraft 多服务器同步邮件系统插件，支持 Folia/Paper 1.21+。
 
