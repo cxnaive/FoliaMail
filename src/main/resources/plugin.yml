@@ -37,3 +37,18 @@ permissions:
   mailsystem.admin:
     default: op
     description: 邮件系统管理员权限（重载配置、清除缓存等）
+  mailsystem.template.create:
+    default: op
+    description: 创建邮件模板
+  mailsystem.template.delete:
+    default: op
+    description: 删除邮件模板
+  mailsystem.template.use:
+    default: op
+    description: 查看和使用邮件模板
+  mailsystem.template.send:
+    default: op
+    description: 使用模板发送给单个玩家
+  mailsystem.template.broadcast:
+    default: op
+    description: 使用模板群发邮件
