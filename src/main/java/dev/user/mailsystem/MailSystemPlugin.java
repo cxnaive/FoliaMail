@@ -13,6 +13,7 @@ import dev.user.mailsystem.listener.MailListener;
 import dev.user.mailsystem.mail.AttachmentManager;
 import dev.user.mailsystem.mail.CrossServerNotifier;
 import dev.user.mailsystem.mail.MailManager;
+import dev.user.mailsystem.template.TemplateManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class MailSystemPlugin extends JavaPlugin {
@@ -28,6 +29,7 @@ public class MailSystemPlugin extends JavaPlugin {
     private EconomyManager economyManager;
     private MailSystemAPI api;
     private AttachmentManager attachmentManager;
+    private TemplateManager templateManager;
 
     @Override
     public void onEnable() {
@@ -53,6 +55,7 @@ public class MailSystemPlugin extends JavaPlugin {
 
         this.mailManager = new MailManager(this);
         this.attachmentManager = new AttachmentManager(this);
+        this.templateManager = new TemplateManager(this);
         this.api = new MailSystemAPIImpl(this);
 
         this.crossServerNotifier = new CrossServerNotifier(this);
@@ -161,5 +164,9 @@ public class MailSystemPlugin extends JavaPlugin {
 
     public AttachmentManager getAttachmentManager() {
         return attachmentManager;
+    }
+
+    public TemplateManager getTemplateManager() {
+        return templateManager;
     }
 }

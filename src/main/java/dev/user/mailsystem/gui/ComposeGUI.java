@@ -50,6 +50,8 @@ public class ComposeGUI implements InventoryHolder {
     private static final int SLOT_BACK = 45;
     private static final int SLOT_CLEAR = 47;
     private static final int SLOT_SEND = 49;
+    private static final int SLOT_TEMPLATE_SAVE = 51;  // 保存为模板按钮
+    private static final int SLOT_TEMPLATE_LOAD = 52;  // 加载模板按钮
     private static final int ATTACHMENT_START = 28;
     private static final int ATTACHMENT_END = 34;
 
@@ -286,6 +288,30 @@ public class ComposeGUI implements InventoryHolder {
                 .setLore(sendButtonLore)
                 .setGlowing(canSend)
                 .build());
+
+        // 模板按钮（仅管理员可见）
+        if (player.hasPermission("mailsystem.template.create")) {
+            inventory.setItem(SLOT_TEMPLATE_SAVE, new ItemBuilder(Material.WRITABLE_BOOK)
+                    .setName("§6§l保存为模板")
+                    .setLore(
+                            "§7点击将当前邮件保存为模板",
+                            "§7方便以后快速发送",
+                            "",
+                            "§e需要权限: mailsystem.template.create"
+                    )
+                    .build());
+        }
+        if (player.hasPermission("mailsystem.template.use")) {
+            inventory.setItem(SLOT_TEMPLATE_LOAD, new ItemBuilder(Material.KNOWLEDGE_BOOK)
+                    .setName("§e§l加载模板")
+                    .setLore(
+                            "§7点击选择并加载已有模板",
+                            "§7自动填充标题、内容、附件",
+                            "",
+                            "§e需要权限: mailsystem.template.use"
+                    )
+                    .build());
+        }
     }
 
     /**
@@ -459,6 +485,23 @@ public class ComposeGUI implements InventoryHolder {
                 }
                 return true;
             }
+            case SLOT_TEMPLATE_SAVE -> {
+                if (!player.hasPermission("mailsystem.template.create")) {
+                    player.sendMessage("§c你没有权限保存模板！");
+                    return true;
+                }
+                handleSaveTemplate(player);
+                return true;
+            }
+            case SLOT_TEMPLATE_LOAD -> {
+                if (!player.hasPermission("mailsystem.template.use")) {
+                    player.sendMessage("§c你没有权限加载模板！");
+                    return true;
+                }
+                player.closeInventory();
+                plugin.getGuiManager().openTemplateList(player);
+                return true;
+            }
             default -> {
                 return true;
             }
@@ -466,16 +509,35 @@ public class ComposeGUI implements InventoryHolder {
     }
 
     /**
-     * 注册聊天监听器
+     * 聊天输入处理函数接口
      */
-    private void registerChatListener(Player player, String type) {
+    @FunctionalInterface
+    private interface ChatInputHandler {
+        /**
+         * @param message 玩家输入的消息
+         * @return 是否继续监听（true=继续，false=注销监听器）
+         */
+        boolean handle(Player player, String message);
+    }
+
+    /**
+     * 注册聊天监听器（通用版本）
+     * @param player 玩家
+     * @param handler 输入处理器，返回true表示继续监听，false表示注销
+     */
+    private void registerChatListener(Player player, ChatInputHandler handler) {
         org.bukkit.event.Listener listener = new org.bukkit.event.Listener() {
             @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
             public void onChat(AsyncChatEvent event) {
                 if (!event.getPlayer().equals(player)) return;
                 event.setCancelled(true);
                 event.viewers().clear();
-                handleChatEvent(player, type, PlainTextComponentSerializer.plainText().serialize(event.message()), this);
+
+                String message = PlainTextComponentSerializer.plainText().serialize(event.message());
+                boolean continueListening = handler.handle(player, message);
+                if (!continueListening) {
+                    guiManager.unregisterChatListener(player.getUniqueId());
+                }
             }
 
             @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
@@ -485,119 +547,146 @@ public class ComposeGUI implements InventoryHolder {
                 event.getRecipients().clear();
                 // 逻辑在新事件中处理，这里只取消事件
             }
-
-            private void handleChatEvent(Player player, String type, String message, org.bukkit.event.Listener listener) {
-                if (message.equalsIgnoreCase("cancel")) {
-                    player.sendMessage("§c已取消输入。");
-                    org.bukkit.event.HandlerList.unregisterAll(listener);
-                    // 重新打开界面
-                    Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
-                        player.getScheduler().run(plugin, t -> guiManager.openCompose(player), null);
-                    }, 5);
-                    return;
-                }
-
-                GUIManager.ComposeData data = guiManager.getPlayerComposeData(player.getUniqueId());
-                if (data == null) {
-                    data = new GUIManager.ComposeData();
-                }
-
-                switch (type) {
-                    case "receiver" -> {
-                        // 先检查在线玩家（不区分大小写）
-                        Player onlineTarget = Bukkit.getPlayer(message);
-                        if (onlineTarget != null) {
-                            data.setReceiver(onlineTarget.getName());
-                            data.setReceiverUuid(onlineTarget.getUniqueId());
-                            player.sendMessage("§a收件人已设置为: §e" + onlineTarget.getName());
-                            break; // 使用 break 继续下面的保存和界面重开
-                        }
-                        // 异步查询离线玩家
-                        player.sendMessage("§a[邮件系统] §e正在查找玩家...");
-                        GUIManager.ComposeData finalData = data;
-                        plugin.getPlayerCacheManager().getPlayerUuid(message, uuid -> {
-                            if (uuid == null) {
-                                player.sendMessage("§c玩家不存在或从未加入过服务器！请重新输入:");
-                                return;
-                            }
-                            plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
-                                String finalName = cachedName != null ? cachedName : message;
-                                finalData.setReceiver(finalName);
-                                finalData.setReceiverUuid(uuid);
-                                guiManager.setPlayerComposeData(player.getUniqueId(), finalData);
-                                player.sendMessage("§a收件人已设置为: §e" + finalName);
-                                org.bukkit.event.HandlerList.unregisterAll(listener);
-                                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
-                                    player.getScheduler().run(plugin, t -> guiManager.openCompose(player), null);
-                                }, 5);
-                            });
-                        });
-                        return; // 异步处理，直接返回不执行下面的保存代码
-                    }
-                    case "title" -> {
-                        if (message.length() > plugin.getMailConfig().getMaxMailTitleLength()) {
-                            player.sendMessage("§c标题过长！最大长度: " + plugin.getMailConfig().getMaxMailTitleLength() + "，请重新输入:");
-                            return;
-                        }
-                        data.setTitle(message);
-                        player.sendMessage("§a标题已设置为: §e" + message);
-                    }
-                    case "content" -> {
-                        if (message.length() > plugin.getMailConfig().getMaxMailContentLength()) {
-                            player.sendMessage("§c内容过长！最大长度: " + plugin.getMailConfig().getMaxMailContentLength() + "，请重新输入:");
-                            return;
-                        }
-                        data.setContent(message);
-                        player.sendMessage("§a内容已设置");
-                    }
-                    case "money" -> {
-                        // 处理清除命令
-                        if (message.equalsIgnoreCase("clear") || message.equals("0")) {
-                            data.setMoneyAttachment(0);
-                            player.sendMessage("§a金币附件已清除");
-                            break;
-                        }
-                        // 解析金额
-                        double amount;
-                        try {
-                            amount = Double.parseDouble(message);
-                        } catch (NumberFormatException e) {
-                            player.sendMessage("§c无效的数字格式！请输入有效的金币数量:");
-                            return;
-                        }
-                        // 检查金额有效性
-                        if (amount < 0) {
-                            player.sendMessage("§c金币数量不能为负数！请重新输入:");
-                            return;
-                        }
-                        if (amount == 0) {
-                            data.setMoneyAttachment(0);
-                            player.sendMessage("§a金币附件已清除");
-                            break;
-                        }
-                        // 检查余额
-                        double balance = plugin.getEconomyManager().getBalance(player);
-                        if (balance < amount) {
-                            player.sendMessage("§c余额不足！当前余额: §f" + plugin.getEconomyManager().format(balance) + "§c，请重新输入:");
-                            return;
-                        }
-                        // 设置金币附件
-                        data.setMoneyAttachment(amount);
-                        player.sendMessage("§a金币附件已设置为: §e" + plugin.getEconomyManager().format(amount));
-                    }
-                }
-
-                guiManager.setPlayerComposeData(player.getUniqueId(), data);
-                org.bukkit.event.HandlerList.unregisterAll(listener);
-
-                // 重新打开界面
-                Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
-                    player.getScheduler().run(plugin, t -> guiManager.openCompose(player), null);
-                }, 5);
-            }
         };
 
         guiManager.registerChatListener(player.getUniqueId(), listener);
+    }
+
+    /**
+     * 注册简单聊天监听器（用于 receiver/title/content/money 等单步输入）
+     * @param player 玩家
+     * @param type 输入类型
+     */
+    private void registerChatListener(Player player, String type) {
+        registerChatListener(player, (p, message) -> {
+            if (message.equalsIgnoreCase("cancel")) {
+                player.sendMessage("§c已取消输入。");
+                reopenComposeDelayed(player);
+                return false;
+            }
+
+            GUIManager.ComposeData data = guiManager.getPlayerComposeData(player.getUniqueId());
+            if (data == null) {
+                data = new GUIManager.ComposeData();
+            }
+
+            boolean continueListening = handleSimpleInput(player, type, message, data);
+            return continueListening;
+        });
+    }
+
+    /**
+     * 处理简单输入（receiver/title/content/money）
+     * 方法内部自行处理数据保存和界面重开
+     * @return true=继续监听，false=处理完成/注销监听器
+     */
+    private boolean handleSimpleInput(Player player, String type, String message, GUIManager.ComposeData data) {
+        switch (type) {
+            case "receiver" -> {
+                // 先检查在线玩家（不区分大小写）
+                Player onlineTarget = Bukkit.getPlayer(message);
+                if (onlineTarget != null) {
+                    data.setReceiver(onlineTarget.getName());
+                    data.setReceiverUuid(onlineTarget.getUniqueId());
+                    guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                    player.sendMessage("§a收件人已设置为: §e" + onlineTarget.getName());
+                    reopenComposeDelayed(player);
+                    return false; // 完成，注销监听器
+                }
+                // 异步查询离线玩家
+                player.sendMessage("§a[邮件系统] §e正在查找玩家...");
+                plugin.getPlayerCacheManager().getPlayerUuid(message, uuid -> {
+                    if (uuid == null) {
+                        player.sendMessage("§c玩家不存在或从未加入过服务器！");
+                        reopenComposeDelayed(player);
+                        return;
+                    }
+                    plugin.getPlayerCacheManager().getPlayerName(uuid, cachedName -> {
+                        String finalName = cachedName != null ? cachedName : message;
+                        data.setReceiver(finalName);
+                        data.setReceiverUuid(uuid);
+                        guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                        player.sendMessage("§a收件人已设置为: §e" + finalName);
+                        reopenComposeDelayed(player);
+                    });
+                });
+                return false; // 异步处理，监听器会在回调完成后被注销
+            }
+            case "title" -> {
+                if (message.length() > plugin.getMailConfig().getMaxMailTitleLength()) {
+                    player.sendMessage("§c标题过长！最大长度: " + plugin.getMailConfig().getMaxMailTitleLength() + "，请重新输入:");
+                    return true; // 继续监听
+                }
+                data.setTitle(message);
+                guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                player.sendMessage("§a标题已设置为: §e" + message);
+                reopenComposeDelayed(player);
+                return false; // 完成
+            }
+            case "content" -> {
+                if (message.length() > plugin.getMailConfig().getMaxMailContentLength()) {
+                    player.sendMessage("§c内容过长！最大长度: " + plugin.getMailConfig().getMaxMailContentLength() + "，请重新输入:");
+                    return true; // 继续监听
+                }
+                data.setContent(message);
+                guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                player.sendMessage("§a内容已设置");
+                reopenComposeDelayed(player);
+                return false; // 完成
+            }
+            case "money" -> {
+                // 处理清除命令
+                if (message.equalsIgnoreCase("clear") || message.equals("0")) {
+                    data.setMoneyAttachment(0);
+                    guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                    player.sendMessage("§a金币附件已清除");
+                    reopenComposeDelayed(player);
+                    return false; // 完成
+                }
+                // 解析金额
+                double amount;
+                try {
+                    amount = Double.parseDouble(message);
+                } catch (NumberFormatException e) {
+                    player.sendMessage("§c无效的数字格式！请输入有效的金币数量:");
+                    return true; // 继续监听
+                }
+                // 检查金额有效性
+                if (amount < 0) {
+                    player.sendMessage("§c金币数量不能为负数！请重新输入:");
+                    return true; // 继续监听
+                }
+                if (amount == 0) {
+                    data.setMoneyAttachment(0);
+                    guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                    player.sendMessage("§a金币附件已清除");
+                    reopenComposeDelayed(player);
+                    return false; // 完成
+                }
+                // 检查余额
+                double balance = plugin.getEconomyManager().getBalance(player);
+                if (balance < amount) {
+                    player.sendMessage("§c余额不足！当前余额: §f" + plugin.getEconomyManager().format(balance) + "§c，请重新输入:");
+                    return true; // 继续监听
+                }
+                // 设置金币附件
+                data.setMoneyAttachment(amount);
+                guiManager.setPlayerComposeData(player.getUniqueId(), data);
+                player.sendMessage("§a金币附件已设置为: §e" + plugin.getEconomyManager().format(amount));
+                reopenComposeDelayed(player);
+                return false; // 完成
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 延迟重新打开写邮件界面
+     */
+    private void reopenComposeDelayed(Player player) {
+        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
+            player.getScheduler().run(plugin, t -> guiManager.openCompose(player), null);
+        }, 5);
     }
 
     /**
@@ -752,50 +841,26 @@ public class ComposeGUI implements InventoryHolder {
         player.sendMessage("§c0. §f取消群发");
         player.sendMessage("§7请在聊天框输入数字选择 (0-4):");
 
-        // 使用GUIManager注册聊天监听器，确保玩家退出时自动清理
-        org.bukkit.event.Listener listener = new org.bukkit.event.Listener() {
-            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
-            public void onChat(AsyncChatEvent event) {
-                if (!event.getPlayer().equals(player)) return;
-                event.setCancelled(true);
-                event.viewers().clear();
-                handleBroadcastSelect(player, data, PlainTextComponentSerializer.plainText().serialize(event.message()).trim(), this);
-            }
-
-            @org.bukkit.event.EventHandler(priority = org.bukkit.event.EventPriority.LOWEST)
-            public void onLegacyChat(org.bukkit.event.player.AsyncPlayerChatEvent event) {
-                if (!event.getPlayer().equals(player)) return;
-                event.setCancelled(true);
-                event.getRecipients().clear();
-                // 逻辑在新事件中处理，这里只取消事件
-            }
-
-            private void handleBroadcastSelect(Player player, GUIManager.ComposeData data, String message, org.bukkit.event.Listener listener) {
-                // 使用GUIManager注销监听器
-                guiManager.unregisterChatListener(player.getUniqueId());
-
-                switch (message) {
-                    case "1" -> broadcastToOnline(player);
-                    case "2" -> broadcastToRecent(player, 3);
-                    case "3" -> broadcastToRecent(player, 7);
-                    case "4" -> broadcastToAll(player);
-                    case "0", "cancel" -> {
-                        player.sendMessage("§c已取消群发。");
-                        // 重置处理状态
-                        data.getProcessing().set(false);
-                        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, task -> {
-                            player.getScheduler().run(plugin, t -> guiManager.openCompose(player), null);
-                        }, 5);
-                    }
-                    default -> {
-                        player.sendMessage("§c无效选项，请重新输入 (0-4):");
-                        // 重新注册监听器
-                        guiManager.registerChatListener(player.getUniqueId(), listener);
-                    }
+        // 使用通用方法注册聊天监听器
+        registerChatListener(player, (p, message) -> {
+            switch (message) {
+                case "1" -> broadcastToOnline(player);
+                case "2" -> broadcastToRecent(player, 3);
+                case "3" -> broadcastToRecent(player, 7);
+                case "4" -> broadcastToAll(player);
+                case "0", "cancel" -> {
+                    player.sendMessage("§c已取消群发。");
+                    // 重置处理状态
+                    data.getProcessing().set(false);
+                    reopenComposeDelayed(player);
+                }
+                default -> {
+                    player.sendMessage("§c无效选项，请重新输入 (0-4):");
+                    return true; // 继续监听
                 }
             }
-        };
-        guiManager.registerChatListener(player.getUniqueId(), listener);
+            return false; // 处理完成，注销监听器
+        });
     }
 
     /**
@@ -966,6 +1031,90 @@ public class ComposeGUI implements InventoryHolder {
             data.clearAttachments();
             data.setReturned(true);
         }
+    }
+
+    /**
+     * 处理保存为模板
+     */
+    private void handleSaveTemplate(Player player) {
+        GUIManager.ComposeData data = guiManager.getPlayerComposeData(player.getUniqueId());
+        if (data == null) {
+            player.sendMessage("§c[邮件系统] 请先填写邮件内容！");
+            return;
+        }
+
+        String title = data.getTitle();
+        if (title == null || title.isEmpty()) {
+            player.sendMessage("§c[邮件系统] 请先设置邮件标题！");
+            return;
+        }
+
+        // 先同步附件到数据，防止关闭时丢失
+        syncAttachmentsToData(player);
+        // 标记附件已处理，防止 closeInventory 时归还附件
+        data.setReturned(true);
+        player.closeInventory();
+        player.sendMessage("§a[邮件系统] §e请输入模板名称（英文标识，如 welcome）：");
+        player.sendMessage("§7输入 'cancel' 取消");
+
+        // 使用通用方法注册聊天监听器（两步输入：名称 -> 显示名称）
+        // 使用数组包装器保存中间状态（Java lambda需要final或有效final）
+        final String[] templateNameHolder = new String[1];
+
+        registerChatListener(player, (p, message) -> {
+            if (message.equalsIgnoreCase("cancel")) {
+                player.sendMessage("§c已取消保存模板。");
+                // reopenComposeDelayed 会重置返还标志
+                reopenComposeDelayed(player);
+                return false;
+            }
+
+            if (templateNameHolder[0] == null) {
+                // 第一步：输入模板名称
+                if (!message.matches("^[a-zA-Z0-9_]+$")) {
+                    player.sendMessage("§c模板名称只能包含字母、数字和下划线！请重新输入：");
+                    return true; // 继续监听
+                }
+
+                // 检查是否已存在（异步操作）
+                plugin.getTemplateManager().getTemplate(message, existing -> {
+                    Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                        if (existing != null) {
+                            player.sendMessage("§e模板 '" + message + "' 已存在，继续将覆盖原模板。");
+                        }
+                        templateNameHolder[0] = message;
+                        player.sendMessage("§a[邮件系统] §e请输入显示名称（可选，直接输入 ':skip' 跳过）：");
+                    });
+                });
+                return true; // 继续监听（异步操作后会提示下一步）
+            } else {
+                // 第二步：输入显示名称
+                // 使用 ":skip" 作为特殊标记，而不是 "skip"，避免用户无法使用 "skip" 作为显示名
+                String displayName = message.equals(":skip") ? templateNameHolder[0] : message;
+
+                // 保存模板
+                plugin.getTemplateManager().saveTemplate(
+                        templateNameHolder[0], displayName,
+                        data.getTitle(), data.getContent() != null ? data.getContent() : "",
+                        data.getAttachments(), data.getMoneyAttachment(),
+                        player, success -> {
+                            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                                if (success) {
+                                    player.sendMessage("§a[邮件系统] 模板 §e" + templateNameHolder[0] + " §a已保存！");
+                                    // 保存成功，清理 ComposeData（附件已存入模板，无需归还）
+                                    guiManager.setPlayerComposeData(player.getUniqueId(), null);
+                                } else {
+                                    player.sendMessage("§c[邮件系统] 保存模板失败！");
+                                    // 保存失败，恢复附件归还标志，允许重新打开界面
+                                    data.setReturned(false);
+                                }
+                                player.getScheduler().runDelayed(plugin, t -> guiManager.openCompose(player), null, 10);
+                            });
+                        }
+                );
+                return false; // 处理完成，注销监听器
+            }
+        });
     }
 
     @Override

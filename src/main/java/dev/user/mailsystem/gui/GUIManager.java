@@ -96,6 +96,17 @@ public class GUIManager {
     }
 
     /**
+     * 打开模板列表
+     */
+    public void openTemplateList(Player player) {
+        player.getScheduler().run(plugin, task -> {
+            TemplateListGUI gui = new TemplateListGUI(plugin, this);
+            gui.open(player, 1);
+            playerOpenGUI.put(player.getUniqueId(), GUIType.TEMPLATE_LIST);
+        }, null);
+    }
+
+    /**
      * 关闭GUI时清理数据
      */
     public void closeGUI(Player player) {
@@ -197,7 +208,8 @@ public class GUIManager {
         SENT_BOX,
         MAIL_VIEW,
         COMPOSE,
-        ADMIN_MAIL_MANAGE
+        ADMIN_MAIL_MANAGE,
+        TEMPLATE_LIST
     }
 
     /**

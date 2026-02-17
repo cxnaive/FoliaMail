@@ -96,6 +96,9 @@ public class MailListener implements Listener, Consumer<ScheduledTask> {
         } else if (holder instanceof AdminMailManageGUI gui) {
             event.setCancelled(true);
             handled = gui.handleClick(player, event.getSlot(), event.isRightClick());
+        } else if (holder instanceof TemplateListGUI gui) {
+            event.setCancelled(true);
+            handled = gui.handleClick(player, event.getSlot(), event.isRightClick());
         }
 
         // 如果处理了点击，确保取消事件

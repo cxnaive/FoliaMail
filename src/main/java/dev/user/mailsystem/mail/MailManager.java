@@ -498,6 +498,10 @@ public class MailManager implements Consumer<ScheduledTask> {
         return attachmentManager.serialize(items);
     }
 
+    public List<ItemStack> deserializeAttachmentsInternal(byte[] data) {
+        return attachmentManager.deserialize(data);
+    }
+
     public BlacklistManager getBlacklistManager() {
         return blacklistManager;
     }

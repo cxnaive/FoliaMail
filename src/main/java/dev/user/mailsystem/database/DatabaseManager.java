@@ -215,6 +215,25 @@ public class DatabaseManager {
 
             createIndexIfNotExists(conn, "mail_blacklist", "idx_blacklist_owner", "owner_uuid", isMySQL);
             createIndexIfNotExists(conn, "mail_blacklist", "idx_blacklist_blocked", "blocked_uuid", isMySQL);
+
+            // 创建邮件模板表
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS mail_templates (" +
+                    "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                    "name VARCHAR(64) UNIQUE NOT NULL, " +
+                    "display_name VARCHAR(128), " +
+                    "title VARCHAR(256) NOT NULL, " +
+                    "content " + longTextType + ", " +
+                    "attachments " + blobType + ", " +
+                    "money_attachment DOUBLE DEFAULT 0, " +
+                    "creator_uuid VARCHAR(36), " +
+                    "creator_name VARCHAR(64), " +
+                    "created_at BIGINT NOT NULL, " +
+                    "updated_at BIGINT NOT NULL, " +
+                    "use_count INT DEFAULT 0" +
+                    ")");
+
+            createIndexIfNotExists(conn, "mail_templates", "idx_template_name", "name", isMySQL);
+            createIndexIfNotExists(conn, "mail_templates", "idx_template_creator", "creator_uuid", isMySQL);
         }
     }
 
@@ -234,16 +253,17 @@ public class DatabaseManager {
     }
 
     // 有效的表名白名单
-    private static final Set<String> VALID_TABLES = Set.of("mails", "player_cache", "mail_send_log", "mail_blacklist");
+    private static final Set<String> VALID_TABLES = Set.of("mails", "player_cache", "mail_send_log", "mail_blacklist", "mail_templates");
     // 有效的列名白名单（用于索引）
     private static final Set<String> VALID_COLUMNS = Set.of(
         "receiver_uuid", "sender_uuid", "expire_time", "server_id", "uuid", "send_date",
-        "owner_uuid", "blocked_uuid", "player_name"
+        "owner_uuid", "blocked_uuid", "player_name", "name", "creator_uuid"
     );
     // 有效的索引名白名单
     private static final Set<String> VALID_INDEXES = Set.of(
         "idx_receiver", "idx_sender", "idx_expire", "idx_server",
-        "idx_player_uuid", "idx_send_log_date", "idx_blacklist_owner", "idx_blacklist_blocked"
+        "idx_player_uuid", "idx_send_log_date", "idx_blacklist_owner", "idx_blacklist_blocked",
+        "idx_template_name", "idx_template_creator"
     );
 
     /**

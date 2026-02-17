@@ -144,6 +144,7 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             case "clearcache" -> handleClearCache(player);
             case "reload" -> handleReload(player);
             case "blacklist", "bl" -> handleBlacklist(player, args);
+            case "template" -> handleTemplate(player, args);
             default -> showHelp(player);
         }
         return true;
@@ -178,6 +179,10 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             // 管理员命令
             if (player.hasPermission("mailsystem.admin")) {
                 completions.addAll(Arrays.asList("reload", "clearcache", "broadcast", "bc", "manage"));
+            }
+            // 模板命令
+            if (player.hasPermission("mailsystem.template.use")) {
+                completions.add("template");
             }
             return completions.stream()
                     .filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase()))
@@ -217,6 +222,28 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                         .filter(c -> c.toLowerCase().startsWith(args[1].toLowerCase()))
                         .toList();
             }
+            // 模板命令的子命令补全
+            if (sub.equals("template")) {
+                List<String> templateCommands = new ArrayList<>();
+                if (player.hasPermission("mailsystem.template.use")) {
+                    templateCommands.addAll(Arrays.asList("list", "info"));
+                }
+                if (player.hasPermission("mailsystem.template.send")) {
+                    templateCommands.add("send");
+                }
+                if (player.hasPermission("mailsystem.template.broadcast")) {
+                    templateCommands.add("broadcast");
+                }
+                if (player.hasPermission("mailsystem.template.create")) {
+                    templateCommands.add("save");
+                }
+                if (player.hasPermission("mailsystem.template.delete")) {
+                    templateCommands.add("delete");
+                }
+                return templateCommands.stream()
+                        .filter(c -> c.toLowerCase().startsWith(args[1].toLowerCase()))
+                        .toList();
+            }
             // 管理命令需要玩家名补全
             if (sub.equals("manage")) {
                 return Bukkit.getOnlinePlayers().stream()
@@ -234,6 +261,33 @@ public class MailCommand implements CommandExecutor, TabCompleter {
                 return Bukkit.getOnlinePlayers().stream()
                         .map(Player::getName)
                         .filter(name -> name.toLowerCase().startsWith(args[2].toLowerCase()))
+                        .toList();
+            }
+            // 模板命令：broadcast 的目标类型补全（需要权限）
+            if (sub.equals("template") && args[1].equalsIgnoreCase("broadcast") &&
+                player.hasPermission("mailsystem.template.broadcast")) {
+                List<String> targets = Arrays.asList("all", "online", "recent3d", "recent7d");
+                return targets.stream()
+                        .filter(t -> t.toLowerCase().startsWith(args[2].toLowerCase()))
+                        .toList();
+            }
+            // 模板 send 和 broadcast 的 args[2] 是模板名，不补全（需要查数据库）
+            // 但返回空列表表示这个位置有参数（只是不补全）
+            if (sub.equals("template") &&
+                (args[1].equalsIgnoreCase("send") || args[1].equalsIgnoreCase("broadcast") ||
+                 args[1].equalsIgnoreCase("info") || args[1].equalsIgnoreCase("delete"))) {
+                return Collections.emptyList();
+            }
+        }
+
+        if (args.length == 4) {
+            String sub = args[0].toLowerCase();
+            // 模板 send 的玩家名补全（需要权限）
+            if (sub.equals("template") && args[1].equalsIgnoreCase("send") &&
+                player.hasPermission("mailsystem.template.send")) {
+                return Bukkit.getOnlinePlayers().stream()
+                        .map(Player::getName)
+                        .filter(name -> name.toLowerCase().startsWith(args[3].toLowerCase()))
                         .toList();
             }
         }
@@ -1133,5 +1187,257 @@ public class MailCommand implements CommandExecutor, TabCompleter {
             return false;
         }
         return true;
+    }
+
+    // ==================== 模板命令处理 ====================
+
+    private void handleTemplate(Player player, String[] args) {
+        if (args.length < 2) {
+            showTemplateHelp(player);
+            return;
+        }
+
+        String sub = args[1].toLowerCase();
+
+        switch (sub) {
+            case "save" -> {
+                if (!checkPermission(player, "mailsystem.template.create")) return;
+                handleTemplateSave(player, args);
+            }
+            case "delete" -> {
+                if (!checkPermission(player, "mailsystem.template.delete")) return;
+                handleTemplateDelete(player, args);
+            }
+            case "list" -> {
+                if (!checkPermission(player, "mailsystem.template.use")) return;
+                handleTemplateList(player, args);
+            }
+            case "info" -> {
+                if (!checkPermission(player, "mailsystem.template.use")) return;
+                handleTemplateInfo(player, args);
+            }
+            case "send" -> {
+                if (!checkPermission(player, "mailsystem.template.send")) return;
+                handleTemplateSend(player, args);
+            }
+            case "broadcast" -> {
+                if (!checkPermission(player, "mailsystem.template.broadcast")) return;
+                handleTemplateBroadcast(player, args);
+            }
+            default -> showTemplateHelp(player);
+        }
+    }
+
+    private void showTemplateHelp(Player player) {
+        player.sendMessage("§6========== 邮件模板命令 ==========");
+        player.sendMessage("§e/fmail template list §7- 列出所有模板");
+        player.sendMessage("§e/fmail template info <名称> §7- 查看模板详情");
+        player.sendMessage("§e/fmail template send <模板名> <玩家名> §7- 使用模板发送");
+        player.sendMessage("§e/fmail template broadcast <模板名> <all|online|recent3d|recent7d> §7- 群发模板");
+        if (player.hasPermission("mailsystem.template.create")) {
+            player.sendMessage("§e/fmail template save <名称> [显示名称] §7- 保存当前邮件为模板");
+        }
+        if (player.hasPermission("mailsystem.template.delete")) {
+            player.sendMessage("§e/fmail template delete <名称> §7- 删除模板");
+        }
+        player.sendMessage("§6==================================");
+    }
+
+    private void handleTemplateSave(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage("§c用法: /fmail template save <名称> [显示名称]");
+            return;
+        }
+
+        String name = args[2];
+        String displayName = args.length > 3 ? args[3] : name;
+
+        // 验证名称格式（只允许字母数字下划线）
+        if (!name.matches("^[a-zA-Z0-9_]+$")) {
+            player.sendMessage("§c模板名称只能包含字母、数字和下划线！");
+            return;
+        }
+
+        // 获取当前写邮件界面的数据
+        var composeData = plugin.getGuiManager().getPlayerComposeData(player.getUniqueId());
+        if (composeData == null) {
+            player.sendMessage("§c请先打开写邮件界面并填写内容！");
+            return;
+        }
+
+        String title = composeData.getTitle();
+        String content = composeData.getContent() != null ? composeData.getContent() : "";
+        var attachments = composeData.getAttachments();
+        double money = composeData.getMoneyAttachment();
+
+        if (title.isEmpty()) {
+            player.sendMessage("§c邮件标题不能为空！");
+            return;
+        }
+
+        plugin.getTemplateManager().saveTemplate(name, displayName, title, content,
+                attachments, money, player, success -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                if (success) {
+                    player.sendMessage("§a[邮件系统] 模板 §e" + name + " §a已保存！");
+                } else {
+                    player.sendMessage("§c[邮件系统] 保存模板失败！");
+                }
+            });
+        });
+    }
+
+    private void handleTemplateDelete(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage("§c用法: /fmail template delete <名称>");
+            return;
+        }
+
+        String name = args[2];
+        plugin.getTemplateManager().deleteTemplate(name, success -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                if (success) {
+                    player.sendMessage("§a[邮件系统] 模板 §e" + name + " §a已删除！");
+                } else {
+                    player.sendMessage("§c[邮件系统] 删除模板失败，模板可能不存在！");
+                }
+            });
+        });
+    }
+
+    private void handleTemplateList(Player player, String[] args) {
+        int pageInput;
+        try {
+            pageInput = args.length > 2 ? Integer.parseInt(args[2]) : 1;
+        } catch (NumberFormatException e) {
+            player.sendMessage("§c页码必须是数字！");
+            return;
+        }
+        final int page = Math.max(pageInput, 1);
+
+        plugin.getTemplateManager().listTemplates(list -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                if (list.isEmpty()) {
+                    player.sendMessage("§e[邮件系统] 暂无邮件模板");
+                    return;
+                }
+
+                player.sendMessage("§6========== 邮件模板列表 (第" + page + "页) ==========");
+                int start = (page - 1) * 10;
+                int end = Math.min(start + 10, list.size());
+
+                for (int i = start; i < end; i++) {
+                    var info = list.get(i);
+                    player.sendMessage("§e" + (i + 1) + ". §f" + info.getDisplayOrName() +
+                            " §7(" + info.name() + ") " +
+                            "§7创建者: " + info.creatorName() +
+                            " §7使用: " + info.useCount() + "次");
+                }
+
+                if (end < list.size()) {
+                    player.sendMessage("§7使用 /fmail template list " + (page + 1) + " 查看下一页");
+                }
+                player.sendMessage("§6============================================");
+            });
+        });
+    }
+
+    private void handleTemplateInfo(Player player, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage("§c用法: /fmail template info <名称>");
+            return;
+        }
+
+        String name = args[2];
+        plugin.getTemplateManager().getTemplate(name, template -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                if (template == null) {
+                    player.sendMessage("§c[邮件系统] 模板不存在: " + name);
+                    return;
+                }
+
+                player.sendMessage("§6========== 模板详情 ==========");
+                player.sendMessage("§e名称: §f" + template.getName());
+                player.sendMessage("§e显示名称: §f" + template.getDisplayOrName());
+                player.sendMessage("§e创建者: §f" + template.getCreatorName());
+                player.sendMessage("§e使用次数: §f" + template.getUseCount());
+                player.sendMessage("§e标题: §f" + template.getTitle());
+                player.sendMessage("§e内容预览: §f" + (template.getContent().length() > 50
+                        ? template.getContent().substring(0, 50) + "..."
+                        : template.getContent()));
+                if (template.getAttachments() != null && !template.getAttachments().isEmpty()) {
+                    player.sendMessage("§e物品附件: §f" + template.getAttachments().size() + "个");
+                }
+                if (template.getMoneyAttachment() > 0) {
+                    player.sendMessage("§e金币附件: §f" + template.getMoneyAttachment());
+                }
+                player.sendMessage("§6==============================");
+            });
+        });
+    }
+
+    private void handleTemplateSend(Player player, String[] args) {
+        if (args.length < 4) {
+            player.sendMessage("§c用法: /fmail template send <模板名> <玩家名>");
+            return;
+        }
+
+        String templateName = args[2];
+        String targetName = args[3];
+
+        plugin.getTemplateManager().sendToPlayer(templateName, player, targetName, result -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                StringBuilder msg = new StringBuilder("§a[邮件系统] ");
+                if (result.isAllSuccess()) {
+                    msg.append("§e使用模板 §f").append(templateName).append(" §e发送邮件成功！");
+                } else if (result.isAllFailed()) {
+                    msg.append("§c发送失败！");
+                } else {
+                    msg.append("§e部分发送成功");
+                }
+                player.sendMessage(msg.toString());
+            });
+        });
+    }
+
+    private void handleTemplateBroadcast(Player player, String[] args) {
+        if (args.length < 4) {
+            player.sendMessage("§c用法: /fmail template broadcast <模板名> <all|online|recent3d|recent7d>");
+            return;
+        }
+
+        String templateName = args[2];
+        String target = args[3].toLowerCase();
+
+        dev.user.mailsystem.template.TemplateManager.BroadcastTarget broadcastTarget;
+        switch (target) {
+            case "all" -> broadcastTarget = dev.user.mailsystem.template.TemplateManager.BroadcastTarget.ALL;
+            case "online" -> broadcastTarget = dev.user.mailsystem.template.TemplateManager.BroadcastTarget.ONLINE;
+            case "recent3d" -> broadcastTarget = dev.user.mailsystem.template.TemplateManager.BroadcastTarget.RECENT_3D;
+            case "recent7d" -> broadcastTarget = dev.user.mailsystem.template.TemplateManager.BroadcastTarget.RECENT_7D;
+            default -> {
+                player.sendMessage("§c无效的目标类型！可用: all, online, recent3d, recent7d");
+                return;
+            }
+        }
+
+        plugin.getTemplateManager().broadcast(templateName, player, broadcastTarget, result -> {
+            Bukkit.getGlobalRegionScheduler().run(plugin, task -> {
+                int sent = result.getSuccessCount();
+                int failed = result.getFailureCount();
+
+                StringBuilder msg = new StringBuilder("§a[邮件系统] ");
+                if (sent > 0) {
+                    msg.append("§e使用模板 §f").append(templateName).append(" §e群发成功，")
+                            .append("§a成功: ").append(sent).append("§e人");
+                    if (failed > 0) {
+                        msg.append("，§c失败: ").append(failed).append("§e人");
+                    }
+                } else {
+                    msg.append("§c群发失败！");
+                }
+                player.sendMessage(msg.toString());
+            });
+        });
     }
 }
